@@ -1,21 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 )
 
 const (
-	appVersion = "1.0.0"
+	appVersion = "0.1.0"
 	appName    = "Notifier"
 )
 
 type Notification struct {
-	Recipient string
-	Subject   string
-	Body      string
-	Channel   string
-	isUrgent  bool
+	Recipient string `json:"to"`
+	Subject   string `json:"subject"`
+	Body      string `json:"body"`
+	Channel   string `json:"channel"`
+	IsUrgent  bool   `json:"urgent"`
 }
 
 func (n Notification) Format() string {
@@ -42,8 +43,24 @@ func (n Notification) Validate() error {
 }
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintln(w, appName, appVersion)
-	fmt.Fprintln(w, "status: available")
+	data := struct {
+		App     string `json:"app"`
+		Version string `json:"version"`
+		Status  string `json:"status"`
+	}{
+		App:     appName,
+		Version: appVersion,
+		Status:  "available",
+	}
+
+	js, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println(w, "Marshal error:", err)
+		return
+	}
+
+	w.Header().Set("Content-type", "application/json")
+	w.Write(js)
 }
 
 func notificationHandler(w http.ResponseWriter, r *http.Request) {
@@ -52,18 +69,39 @@ func notificationHandler(w http.ResponseWriter, r *http.Request) {
 		Subject:   "Deploy done",
 		Body:      "Deployment completed successfully.",
 		Channel:   "email",
-		isUrgent:  true,
+		IsUrgent:  true,
 	}
 
-	err := n.Validate()
-	if err != nil {
-		fmt.Fprintln(w, "Validation failed:", err)
+	validationErr := n.Validate()
+	if validationErr != nil {
+		errResponse := struct {
+			Error string `json:"error"`
+		}{
+			Error: validationErr.Error(),
+		}
+
+		js, jsErr := json.Marshal(errResponse)
+		if jsErr != nil {
+			fmt.Fprintln(w, "Marshal error:", jsErr)
+			return
+		}
+
+		w.Header().Set("Content-type", "application/json")
+		w.Write(js)
 		return
 	}
 
-	message, status := n.Send()
-	fmt.Fprintln(w, message)
-	fmt.Fprintln(w, "status:", status)
+	js, jsErr := json.Marshal(n)
+	if jsErr != nil {
+		fmt.Fprintln(w, "Marshal error:", jsErr)
+		return
+	}
+
+	// message, status := n.Send()
+	// fmt.Fprintln(w, message)
+	// fmt.Fprintln(w, "status:", status)
+	w.Header().Set("Content-type", "application/json")
+	w.Write(js)
 }
 
 func main() {
