@@ -7,36 +7,44 @@ const (
 	appName    = "Notifier"
 )
 
+type Notification struct {
+	Recipient string
+	Subject   string
+	Body      string
+	Channel   string
+	isUrgent  bool
+}
+
 func main() {
-	recipient := "user@example.com"
-	subject := "Deploy done"
 	// retryCount := 3
 	// timeout := 3.5 // float64
 	// isUrgent := false
 
 	fmt.Println(appVersion)
 
-	message, status := Send(recipient, subject, "Deployment completed successfully.", "email")
-	fmt.Println(message, status)
+	n := Notification{
+		Recipient: "user@example.com",
+		Subject:   "Deploy done",
+		Body:      "Deployment completed successfully.",
+		Channel:   "email",
+		isUrgent:  true,
+	}
+	message, status := Send(n)
+	fmt.Printf("%s \n %s", message, status)
 }
 
-func FormatNotification(
-	recipient string,
-	subject string,
-	body string,
-	channel string,
-) string {
+func FormatNotification(n Notification) string {
 	return fmt.Sprintf(
 		"to: %s | subject: %s | body: %s | channel: %s",
-		recipient,
-		subject,
-		body,
-		channel,
+		n.Recipient,
+		n.Subject,
+		n.Body,
+		n.Channel,
 	)
 }
 
-func Send(recipient, subject, body, channel string) (string, string) {
-	message := FormatNotification(recipient, subject, "Deployment completed successfully.", "email")
-	status := "queued"
+func Send(n Notification) (message string, status string) {
+	message = FormatNotification(n)
+	status = "queued"
 	return message, status
 }
