@@ -15,6 +15,22 @@ type Notification struct {
 	isUrgent  bool
 }
 
+func (n Notification) Format() string {
+	return fmt.Sprintf(
+		"to: %s | subject: %s | body: %s | channel: %s",
+		n.Recipient,
+		n.Subject,
+		n.Body,
+		n.Channel,
+	)
+}
+
+func (n Notification) Send() (message string, status string) {
+	message = n.Format()
+	status = "queued"
+	return message, status
+}
+
 func main() {
 	// retryCount := 3
 	// timeout := 3.5 // float64
@@ -29,22 +45,6 @@ func main() {
 		Channel:   "email",
 		isUrgent:  true,
 	}
-	message, status := Send(n)
+	message, status := n.Send()
 	fmt.Printf("%s \n %s", message, status)
-}
-
-func FormatNotification(n Notification) string {
-	return fmt.Sprintf(
-		"to: %s | subject: %s | body: %s | channel: %s",
-		n.Recipient,
-		n.Subject,
-		n.Body,
-		n.Channel,
-	)
-}
-
-func Send(n Notification) (message string, status string) {
-	message = FormatNotification(n)
-	status = "queued"
-	return message, status
 }
