@@ -31,6 +31,13 @@ func (n Notification) Send() (message string, status string) {
 	return message, status
 }
 
+func (n Notification) Validate() error {
+	if n.Recipient == "" {
+		return fmt.Errorf("recipient is required")
+	}
+	return nil
+}
+
 func main() {
 	// retryCount := 3
 	// timeout := 3.5 // float64
@@ -45,6 +52,14 @@ func main() {
 		Channel:   "email",
 		isUrgent:  true,
 	}
+
+	err := n.Validate()
+	if err != nil {
+		fmt.Println("Validation failed:", err)
+		return
+	}
+
 	message, status := n.Send()
+
 	fmt.Printf("%s \n %s", message, status)
 }
