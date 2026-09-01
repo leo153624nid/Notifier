@@ -11,6 +11,8 @@ const (
 	appName    = "Notifier"
 )
 
+var notifications []Notification
+
 type Notification struct {
 	Recipient string `json:"to"`
 	Subject   string `json:"subject"`
@@ -64,15 +66,29 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func notificationHandler(w http.ResponseWriter, r *http.Request) {
-	n := Notification{
-		Recipient: "user@example.com",
+	n1 := Notification{
+		Recipient: "user@example.com111",
+		Subject:   "Deploy done",
+		Body:      "Deployment completed successfully.",
+		Channel:   "email",
+		IsUrgent:  true,
+	}
+	n2 := Notification{
+		Recipient: "user@example.com222",
 		Subject:   "Deploy done",
 		Body:      "Deployment completed successfully.",
 		Channel:   "email",
 		IsUrgent:  true,
 	}
 
-	validationErr := n.Validate()
+	notifications = append(notifications, n1, n2)
+
+	for i, n := range notifications {
+		notifications[i].Subject = "testtttttt"
+		fmt.Println(n.Subject) // copied instance
+	}
+
+	validationErr := n1.Validate()
 	if validationErr != nil {
 		errResponse := struct {
 			Error string `json:"error"`
@@ -91,7 +107,7 @@ func notificationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	js, jsErr := json.Marshal(n)
+	js, jsErr := json.Marshal(notifications)
 	if jsErr != nil {
 		fmt.Fprintln(w, "Marshal error:", jsErr)
 		return
