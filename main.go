@@ -66,39 +66,34 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func notificationHandler(w http.ResponseWriter, r *http.Request) {
-	n1 := Notification{
-		Recipient: "user@example.com111",
-		Subject:   "Deploy done",
-		Body:      "Deployment completed successfully.",
-		Channel:   "email",
-		IsUrgent:  true,
-	}
-	n2 := Notification{
-		Recipient: "user@example.com222",
-		Subject:   "Deploy done",
-		Body:      "Deployment completed successfully.",
-		Channel:   "email",
-		IsUrgent:  true,
-	}
+	if r.Method == http.MethodGet {
+		// for i, n := range notifications {
+		// 	notifications[i].Subject = "testtttttt"
+		// 	fmt.Println(n.Subject) // copied instance
+		// }
 
-	notifications = append(notifications, n1, n2)
+		// validationErr := n1.Validate()
+		// if validationErr != nil {
+		// 	errResponse := struct {
+		// 		Error string `json:"error"`
+		// 	}{
+		// 		Error: validationErr.Error(),
+		// 	}
 
-	for i, n := range notifications {
-		notifications[i].Subject = "testtttttt"
-		fmt.Println(n.Subject) // copied instance
-	}
+		// 	js, jsErr := json.Marshal(errResponse)
+		// 	if jsErr != nil {
+		// 		fmt.Fprintln(w, "Marshal error:", jsErr)
+		// 		return
+		// 	}
 
-	validationErr := n1.Validate()
-	if validationErr != nil {
-		errResponse := struct {
-			Error string `json:"error"`
-		}{
-			Error: validationErr.Error(),
-		}
+		// 	w.Header().Set("Content-type", "application/json")
+		// 	w.Write(js)
+		// 	return
+		// }
 
-		js, jsErr := json.Marshal(errResponse)
-		if jsErr != nil {
-			fmt.Fprintln(w, "Marshal error:", jsErr)
+		js, err := json.Marshal(notifications)
+		if err != nil {
+			fmt.Println(w, "Marshal error:", err)
 			return
 		}
 
@@ -107,14 +102,42 @@ func notificationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	js, jsErr := json.Marshal(notifications)
-	if jsErr != nil {
-		fmt.Fprintln(w, "Marshal error:", jsErr)
+	if r.Method == http.MethodPost {
+		var newNotification Notification
+		decodeErr := json.NewDecoder(r.Body).Decode(&newNotification)
+		if decodeErr != nil {
+			errResponse := struct {
+				Error string `json:"error"`
+			}{
+				Error: decodeErr.Error(),
+			}
+
+			js, err := json.Marshal(errResponse)
+			if err != nil {
+				fmt.Println(w, "Marshal error:", err)
+				return
+			}
+
+			w.Header().Set("Content-type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(js)
+		}
+
+		notifications = append(notifications, newNotification)
+
+		js, jsErr := json.Marshal(newNotification)
+		if jsErr != nil {
+			fmt.Fprintln(w, "Marshal error:", jsErr)
+			return
+		}
+
+		w.Header().Set("Content-type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		w.Write(js)
 		return
 	}
 
-	w.Header().Set("Content-type", "application/json")
-	w.Write(js)
+	w.WriteHeader(http.StatusMethodNotAllowed)
 }
 
 func main() {
