@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 const (
@@ -148,6 +149,37 @@ func notificationHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusMethodNotAllowed)
 }
 
+func getNotification(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error": "Invalid notification ID"}`))
+		return
+	}
+
+	n, ok := notifications[id]
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error": "Notification not found"}`))
+		return
+	}
+
+	js, err := json.Marshal(n)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error": "Failed to marshal notification"}`))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(js)
+}
+
 func listNotifications(w http.ResponseWriter, r *http.Request) {
 	var all []Notification
 	for _, n := range notifications {
@@ -226,6 +258,7 @@ func main() {
 
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("GET /api/notifications", listNotifications)
+	http.HandleFunc("GET /api/notifications/{id}", getNotification)
 	http.HandleFunc("POST /api/notifications", createNotification)
 
 	err := http.ListenAndServe(":8080", nil)
