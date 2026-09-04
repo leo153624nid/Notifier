@@ -12,9 +12,13 @@ const (
 	appName    = "Notifier"
 )
 
+type Server struct {
+	notifications map[int]Notification
+	nextID        int
+}
+
 // var notifications []Notification // slice
-var notifications = map[int]Notification{} // map
-var nextID int
+// var notifications map[int]Notification{} // empty map
 
 type Notification struct {
 	ID        int    `json:"id"`
@@ -72,84 +76,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
-func notificationHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		// for i, n := range notifications {
-		// 	notifications[i].Subject = "testtttttt"
-		// 	fmt.Println(n.Subject) // copied instance
-		// }
-
-		// validationErr := n1.Validate()
-		// if validationErr != nil {
-		// 	errResponse := struct {
-		// 		Error string `json:"error"`
-		// 	}{
-		// 		Error: validationErr.Error(),
-		// 	}
-
-		// 	js, jsErr := json.Marshal(errResponse)
-		// 	if jsErr != nil {
-		// 		fmt.Fprintln(w, "Marshal error:", jsErr)
-		// 		return
-		// 	}
-
-		// 	w.Header().Set("Content-type", "application/json")
-		// 	w.Write(js)
-		// 	return
-		// }
-
-		js, err := json.Marshal(notifications)
-		if err != nil {
-			fmt.Println(w, "Marshal error:", err)
-			return
-		}
-
-		w.Header().Set("Content-type", "application/json")
-		w.Write(js)
-		return
-	}
-
-	if r.Method == http.MethodPost {
-		var newNotification Notification
-		decodeErr := json.NewDecoder(r.Body).Decode(&newNotification)
-		if decodeErr != nil {
-			errResponse := struct {
-				Error string `json:"error"`
-			}{
-				Error: decodeErr.Error(),
-			}
-
-			js, err := json.Marshal(errResponse)
-			if err != nil {
-				fmt.Println(w, "Marshal error:", err)
-				return
-			}
-
-			w.Header().Set("Content-type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write(js)
-		}
-
-		// notifications = append(notifications, newNotification)
-		notifications[nextID] = newNotification
-		nextID++
-
-		js, jsErr := json.Marshal(newNotification)
-		if jsErr != nil {
-			fmt.Fprintln(w, "Marshal error:", jsErr)
-			return
-		}
-
-		w.Header().Set("Content-type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		w.Write(js)
-		return
-	}
-
-	w.WriteHeader(http.StatusMethodNotAllowed)
-}
-
-func getNotification(w http.ResponseWriter, r *http.Request) {
+func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -159,7 +86,7 @@ func getNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	n, ok := notifications[id]
+	n, ok := s.notifications[id]
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -180,9 +107,9 @@ func getNotification(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
-func listNotifications(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	var all []Notification
-	for _, n := range notifications {
+	for _, n := range s.notifications {
 		all = append(all, n)
 	}
 
@@ -198,7 +125,7 @@ func listNotifications(w http.ResponseWriter, r *http.Request) {
 	w.Write(js)
 }
 
-func createNotification(w http.ResponseWriter, r *http.Request) {
+func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	var n Notification
 	err := json.NewDecoder(r.Body).Decode(&n)
 	if err != nil {
@@ -223,9 +150,9 @@ func createNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nextID++
-	n.ID = nextID
-	notifications[n.ID] = n
+	s.nextID++
+	n.ID = s.nextID
+	s.notifications[n.ID] = n
 
 	js, err := json.Marshal(n)
 	if err != nil {
@@ -239,27 +166,32 @@ func createNotification(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	nextID++
-	notifications[nextID] = Notification{
-		ID:        nextID,
+	s := &Server{
+		notifications: map[int]Notification{},
+		nextID:        0,
+	}
+
+	s.nextID++
+	s.notifications[s.nextID] = Notification{
+		ID:        s.nextID,
 		Recipient: "111",
 		Subject:   "Test Notification",
 		Body:      "This is a test notification.",
 		Channel:   "email",
 		IsUrgent:  false,
 	}
-	nextID++
-	notifications[nextID] = Notification{
-		ID:        nextID,
+	s.nextID++
+	s.notifications[s.nextID] = Notification{
+		ID:        s.nextID,
 		Recipient: "222",
 	}
 
 	fmt.Printf("Starting %s %s on: 8080\n", appName, appVersion)
 
 	http.HandleFunc("/health", healthHandler)
-	http.HandleFunc("GET /api/notifications", listNotifications)
-	http.HandleFunc("GET /api/notifications/{id}", getNotification)
-	http.HandleFunc("POST /api/notifications", createNotification)
+	http.HandleFunc("GET /api/notifications", s.listNotifications)
+	http.HandleFunc("GET /api/notifications/{id}", s.getNotification)
+	http.HandleFunc("POST /api/notifications", s.createNotification)
 
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
