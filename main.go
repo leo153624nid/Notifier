@@ -19,6 +19,7 @@ type Server struct {
 	notifications map[int]Notification
 	nextID        int
 	logger        *slog.Logger
+	senders       map[string]Sender
 }
 
 // var notifications []Notification // slice
@@ -31,6 +32,23 @@ type Notification struct {
 	Body      string `json:"body"`
 	Channel   string `json:"channel"`
 	IsUrgent  bool   `json:"urgent"`
+}
+
+type Sender interface {
+	Send(Notification) error
+}
+
+type ConsoleSender struct{}
+type EmailSender struct{}
+
+func (cs ConsoleSender) Send(n Notification) error {
+	fmt.Printf("[console] to %s | %s\n", n.Recipient, n.Subject)
+	return nil
+}
+
+func (es EmailSender) Send(n Notification) error {
+	fmt.Printf("[email] to %s | %s\n", n.Recipient, n.Subject)
+	return nil
 }
 
 func (n Notification) Format() string {
@@ -154,9 +172,22 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sender, ok := s.senders[n.Channel]
+	if !ok {
+		s.logger.Error("Invalid channel", "channel", n.Channel)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error": "Invalid channel"}`))
+		return
+	}
+
 	s.nextID++
 	n.ID = s.nextID
 	s.notifications[n.ID] = n
+
+	err = sender.Send(n)
+	if err != nil {
+		s.logger.Error("Failed to send notification", "error", err)
+	}
 
 	js, err := json.Marshal(n)
 	if err != nil {
@@ -192,11 +223,16 @@ func contentType(next http.Handler) http.Handler {
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	senders := map[string]Sender{
+		"console": ConsoleSender{},
+		"email":   EmailSender{},
+	}
 
 	s := &Server{
 		notifications: map[int]Notification{},
 		nextID:        0,
 		logger:        logger,
+		senders:       senders,
 	}
 
 	s.nextID++
@@ -212,6 +248,9 @@ func main() {
 	s.notifications[s.nextID] = Notification{
 		ID:        s.nextID,
 		Recipient: "222",
+		Body:      "This is another test notification.",
+		Channel:   "console",
+		IsUrgent:  true,
 	}
 
 	s.logger.Info("Starting server", "app", appName, "version", appVersion, "port", 8080)
