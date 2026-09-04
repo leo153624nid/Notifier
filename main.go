@@ -3,8 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
+	"time"
 )
 
 const (
@@ -15,6 +18,7 @@ const (
 type Server struct {
 	notifications map[int]Notification
 	nextID        int
+	logger        *slog.Logger
 }
 
 // var notifications []Notification // slice
@@ -53,7 +57,7 @@ func (n Notification) Validate() error {
 	return nil
 }
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		App     string `json:"app"`
 		Version string `json:"version"`
@@ -66,12 +70,12 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(data)
 	if err != nil {
-		fmt.Println(w, "Marshal error:", err)
+		s.logger.Error("Marshal error", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-type", "application/json")
+	// w.Header().Set("Content-type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(js)
 }
@@ -80,7 +84,7 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
+		// w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"error": "Invalid notification ID"}`))
 		return
@@ -88,7 +92,7 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 
 	n, ok := s.notifications[id]
 	if !ok {
-		w.Header().Set("Content-Type", "application/json")
+		// w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"error": "Notification not found"}`))
 		return
@@ -96,13 +100,13 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(n)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
+		// w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`{"error": "Failed to marshal notification"}`))
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	// w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(js)
 }
@@ -115,12 +119,12 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(all)
 	if err != nil {
-		fmt.Println("Marshal error:", err)
+		s.logger.Error("Marshal error", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	// w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(js)
 }
@@ -129,7 +133,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	var n Notification
 	err := json.NewDecoder(r.Body).Decode(&n)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
+		// w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"error": "Invalid request payload"}`))
 		return
@@ -144,7 +148,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 		}
 
 		js, _ := json.Marshal(errResponse)
-		w.Header().Set("Content-Type", "application/json")
+		// w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(js)
 		return
@@ -156,19 +160,43 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(n)
 	if err != nil {
-		fmt.Println("Marshal error:", err)
+		s.logger.Error("Marshal error", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	// w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	w.Write(js)
 }
 
+func (s *Server) logRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		s.logger.Info(
+			"request completed",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"duration", time.Since(start),
+		)
+	})
+}
+
+func contentType(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
 	s := &Server{
 		notifications: map[int]Notification{},
 		nextID:        0,
+		logger:        logger,
 	}
 
 	s.nextID++
@@ -186,15 +214,16 @@ func main() {
 		Recipient: "222",
 	}
 
-	fmt.Printf("Starting %s %s on: 8080\n", appName, appVersion)
+	s.logger.Info("Starting server", "app", appName, "version", appVersion, "port", 8080)
 
-	http.HandleFunc("/health", healthHandler)
-	http.HandleFunc("GET /api/notifications", s.listNotifications)
-	http.HandleFunc("GET /api/notifications/{id}", s.getNotification)
-	http.HandleFunc("POST /api/notifications", s.createNotification)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", s.healthHandler)
+	mux.HandleFunc("GET /api/notifications", s.listNotifications)
+	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
+	mux.HandleFunc("POST /api/notifications", s.createNotification)
 
-	err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8080", s.logRequest(contentType(mux)))
 	if err != nil {
-		fmt.Println("Error starting server:", err)
+		s.logger.Error("Error starting server", "error", err)
 	}
 }
