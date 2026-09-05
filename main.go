@@ -38,9 +38,25 @@ type Sender interface {
 	Send(Notification) error
 }
 
+type LoggingSender struct {
+	Sender
+	logger *slog.Logger
+}
+
 type ConsoleSender struct{}
 type EmailSender struct{}
 type TelegramSender struct{}
+
+func (ls LoggingSender) Send(n Notification) error {
+	ls.logger.Info("sending", "to", n.Recipient, "channel", n.Channel)
+	err := ls.Sender.Send(n)
+	if err != nil {
+		ls.logger.Error("Failed to send notification", "error", err)
+		return err
+	}
+	ls.logger.Info("sent", "to", n.Recipient, "channel", n.Channel)
+	return nil
+}
 
 func (cs ConsoleSender) Send(n Notification) error {
 	fmt.Printf("[console] to %s | %s\n", n.Recipient, n.Subject)
@@ -55,19 +71,6 @@ func (es EmailSender) Send(n Notification) error {
 func (tg TelegramSender) Send(n Notification) error {
 	fmt.Printf("[telegram] to %s | %s\n", n.Recipient, n.Subject)
 	return nil
-}
-
-func senderType(s Sender) string {
-	switch s.(type) {
-	case ConsoleSender:
-		return "console"
-	case EmailSender:
-		return "email"
-	case TelegramSender:
-		return "telegram"
-	default:
-		return "unknown"
-	}
 }
 
 func (n Notification) Format() string {
@@ -199,8 +202,6 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logger.Info("Sending notification", "id", n.ID, "sender_type", fmt.Sprintf("%T", senderType(sender)))
-
 	s.nextID++
 	n.ID = s.nextID
 	s.notifications[n.ID] = n
@@ -208,17 +209,6 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	err = sender.Send(n)
 	if err != nil {
 		s.logger.Error("Failed to send notification", "error", err)
-	}
-
-	switch n.Channel {
-	case "console":
-		s.logger.Info("Notification sent to console", "id", n.ID)
-	case "email":
-		s.logger.Info("Notification sent via email", "id", n.ID)
-	case "telegram":
-		s.logger.Info("Notification sent via telegram", "id", n.ID)
-	default:
-		s.logger.Warn("Unknown channel", "channel", n.Channel, "id", n.ID)
 	}
 
 	js, err := json.Marshal(n)
@@ -256,9 +246,9 @@ func contentType(next http.Handler) http.Handler {
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	senders := map[string]Sender{
-		"console":  ConsoleSender{},
-		"email":    EmailSender{},
-		"telegram": TelegramSender{},
+		"console":  LoggingSender{ConsoleSender{}, logger},
+		"email":    LoggingSender{EmailSender{}, logger},
+		"telegram": LoggingSender{TelegramSender{}, logger},
 	}
 
 	s := &Server{
