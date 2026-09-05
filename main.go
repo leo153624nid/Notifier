@@ -73,6 +73,10 @@ func (tg TelegramSender) Send(n Notification) error {
 	return nil
 }
 
+func (n Notification) String() string {
+	return fmt.Sprintf("Notification{to:%s, subject:%s, channel:%s}", n.Recipient, n.Subject, n.Channel)
+}
+
 func (n Notification) Format() string {
 	return fmt.Sprintf(
 		"id: %d | to: %s | subject: %s | body: %s | channel: %s",
