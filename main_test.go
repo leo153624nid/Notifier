@@ -2,6 +2,10 @@ package main
 
 import (
 	"bytes"
+	"io"
+	"log/slog"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -71,5 +75,29 @@ func TestValidate(t *testing.T) {
 				t.Errorf("Validate() error: %s", err)
 			}
 		})
+	}
+}
+
+func TestHealthHandler(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	senders := map[string]Sender{
+		"console": &MockSender{},
+	}
+
+	s, err := NewServer(logger, senders)
+	if err != nil {
+		t.Fatalf("NewServer() error: %s", err)
+	}
+
+	r := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+
+	s.healthHandler(w, r)
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "available") {
+		t.Errorf("body = %q, want contains %q", w.Body.String(), "available")
 	}
 }
