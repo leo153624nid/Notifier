@@ -101,3 +101,59 @@ func TestHealthHandler(t *testing.T) {
 		t.Errorf("body = %q, want contains %q", w.Body.String(), "available")
 	}
 }
+
+func TestCreateNotification(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantCalls  int
+	}{
+		{
+			name:       "valid request",
+			body:       `{"to":"user@example.com","subject":"some","channel":"email"}`,
+			wantStatus: 201,
+			wantCalls:  1,
+		},
+		{
+			name:       "empty recipient",
+			body:       `{"to":"","subject":"some","channel":"email"}`,
+			wantStatus: 400,
+			wantCalls:  0,
+		},
+		{
+			name:       "unknown channel",
+			body:       `{"to":"user@example.com","subject":"some","channel":"sms"}`,
+			wantStatus: 400,
+			wantCalls:  0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockSender{}
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			s, err := NewServer(
+				logger,
+				map[string]Sender{
+					"email": mock,
+				},
+			)
+			if err != nil {
+				t.Fatalf("NewSever() error: %s", err)
+			}
+
+			r := httptest.NewRequest("POST", "/api/notifications", strings.NewReader(tt.body))
+			w := httptest.NewRecorder()
+
+			s.createNotification(w, r)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)
+			}
+			if len(mock.Calls) != tt.wantCalls {
+				t.Errorf("calls = %d, want %d", len(mock.Calls), tt.wantCalls)
+			}
+		})
+	}
+}
