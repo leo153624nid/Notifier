@@ -117,6 +117,9 @@ func (n Notification) Validate() error {
 	if n.Recipient == "" {
 		return fmt.Errorf("recipient is required")
 	}
+	if n.Channel == "" {
+		return fmt.Errorf("channel is required")
+	}
 	return nil
 }
 
