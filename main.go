@@ -247,6 +247,22 @@ func contentType(next http.Handler) http.Handler {
 	})
 }
 
+func NewServer(logger *slog.Logger, senders map[string]Sender) (*Server, error) {
+	if logger == nil {
+		return nil, fmt.Errorf("logger is required")
+	}
+	if len(senders) == 0 {
+		return nil, fmt.Errorf("senders is required")
+	}
+
+	return &Server{
+		notifications: map[int]Notification{},
+		nextID:        0,
+		logger:        logger,
+		senders:       senders,
+	}, nil
+}
+
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	senders := map[string]Sender{
@@ -255,11 +271,10 @@ func main() {
 		"telegram": LoggingSender{TelegramSender{}, logger},
 	}
 
-	s := &Server{
-		notifications: map[int]Notification{},
-		nextID:        0,
-		logger:        logger,
-		senders:       senders,
+	s, err := NewServer(logger, senders)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "server: %s\n", err)
+		os.Exit(1)
 	}
 
 	s.nextID++
@@ -288,7 +303,7 @@ func main() {
 	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
 	mux.HandleFunc("POST /api/notifications", s.createNotification)
 
-	err := http.ListenAndServe(":8080", s.logRequest(contentType(mux)))
+	err = http.ListenAndServe(":8080", s.logRequest(contentType(mux)))
 	if err != nil {
 		s.logger.Error("Error starting server", "error", err)
 	}
