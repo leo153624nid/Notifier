@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
@@ -131,13 +132,14 @@ func TestCreateNotification(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &MockSender{}
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			mock := &MockSender{}
+			senders := map[string]Sender{
+				"email": mock,
+			}
 			s, err := NewServer(
 				logger,
-				map[string]Sender{
-					"email": mock,
-				},
+				senders,
 			)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
@@ -153,6 +155,139 @@ func TestCreateNotification(t *testing.T) {
 			}
 			if len(mock.Calls) != tt.wantCalls {
 				t.Errorf("calls = %d, want %d", len(mock.Calls), tt.wantCalls)
+			}
+		})
+	}
+}
+
+func TestGetNotification(t *testing.T) {
+	tests := []struct {
+		name       string
+		id         string
+		wantStatus int
+		wantErr    bool
+	}{
+		{
+			name:       "valid request",
+			id:         "1",
+			wantStatus: 200,
+			wantErr:    false,
+		},
+		{
+			name:       "no such id",
+			id:         "22",
+			wantStatus: 404,
+			wantErr:    true,
+		},
+		{
+			name:       "wrong id",
+			id:         "someId",
+			wantStatus: 400,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			mock := &MockSender{}
+			senders := map[string]Sender{
+				"email": mock,
+			}
+			s, err := NewServer(
+				logger,
+				senders,
+			)
+			if err != nil {
+				t.Fatalf("NewSever() error: %s", err)
+			}
+			s.nextID++
+			s.notifications[s.nextID] = Notification{
+				ID:        s.nextID,
+				Recipient: "needed recipient",
+				Subject:   "Test Notification",
+				Body:      "This is a test notification.",
+				Channel:   "email",
+				IsUrgent:  false,
+			}
+
+			r := httptest.NewRequest("GET", "/api/notifications/{id}", nil)
+			r.SetPathValue("id", tt.id)
+			w := httptest.NewRecorder()
+
+			s.getNotification(w, r)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)
+			}
+			if !tt.wantErr && !strings.Contains(w.Body.String(), "needed recipient") {
+				t.Errorf("body = %q, want contains %q", w.Body.String(), "needed recipient")
+			}
+			if tt.wantErr && !strings.Contains(w.Body.String(), "error") {
+				t.Errorf("body = %q, want contains %q", w.Body.String(), "error")
+			}
+		})
+	}
+}
+
+func TestListNotifications(t *testing.T) {
+	tests := []struct {
+		name       string
+		ids        []int
+		wantStatus int
+		wantErr    bool
+	}{
+		{
+			name:       "valid request",
+			ids:        []int{1, 2},
+			wantStatus: 200,
+			wantErr:    false,
+		},
+		{
+			name:       "empty array",
+			ids:        []int{},
+			wantStatus: 200,
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			mock := &MockSender{}
+			senders := map[string]Sender{
+				"email": mock,
+			}
+			s, err := NewServer(
+				logger,
+				senders,
+			)
+			if err != nil {
+				t.Fatalf("NewSever() error: %s", err)
+			}
+
+			for _, v := range tt.ids {
+				s.notifications[v] = Notification{
+					ID:        v,
+					Recipient: fmt.Sprintf("recipient #%d", v),
+				}
+			}
+
+			r := httptest.NewRequest("GET", "/api/notifications", nil)
+			w := httptest.NewRecorder()
+
+			s.listNotifications(w, r)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)
+			}
+			for _, v := range tt.ids {
+				if !tt.wantErr && !strings.Contains(w.Body.String(), fmt.Sprintf("recipient #%d", v)) {
+					t.Errorf("body = %q, want contains %q", w.Body.String(), fmt.Sprintf("recipient #%d", v))
+				}
+			}
+			if tt.wantErr && !strings.Contains(w.Body.String(), "error") {
+				t.Errorf("body = %q, want contains %q", w.Body.String(), "error")
 			}
 		})
 	}
