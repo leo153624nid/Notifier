@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -290,5 +291,28 @@ func TestListNotifications(t *testing.T) {
 				t.Errorf("body = %q, want contains %q", w.Body.String(), "error")
 			}
 		})
+	}
+}
+
+func TestErrNotFoundThroughChain(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	mock := &MockSender{}
+	senders := map[string]Sender{
+		"email": mock,
+	}
+	s, err := NewServer(
+		logger,
+		senders,
+	)
+	if err != nil {
+		t.Fatalf("NewSever() error: %s", err)
+	}
+
+	_, err = s.findNotification(9999)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("error in not ErrNotFound, got: %s", err)
 	}
 }
