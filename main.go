@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +16,12 @@ const (
 	appVersion = "0.1.0"
 	appName    = "Notifier"
 )
+
+var ErrNotFound = errors.New("notification not found")
+var ErrInvalidId = errors.New("invalid notification id")
+var ErrInvalidChannel = errors.New("invalid channel")
+var ErrFailedMarshal = errors.New("failed marshal")
+var ErrInternal = errors.New("internal server error")
 
 type Server struct {
 	notifications map[int]Notification
@@ -114,13 +121,37 @@ func (n Notification) Send() (message string, status string) {
 }
 
 func (n Notification) Validate() error {
+	const op = "Notification.Validate"
+
 	if n.Recipient == "" {
-		return fmt.Errorf("recipient is required")
+		return fmt.Errorf("%s: recipient is required", op)
 	}
 	if n.Channel == "" {
-		return fmt.Errorf("channel is required")
+		return fmt.Errorf("%s: channel is required", op)
 	}
 	return nil
+}
+
+func (s *Server) findNotification(id int) (Notification, error) {
+	const op = "Server.findNotification"
+
+	n, ok := s.notifications[id]
+	if !ok {
+		return Notification{}, fmt.Errorf("%s: %w", op, ErrNotFound)
+	}
+
+	return n, nil
+}
+
+func (s *Server) findSender(n Notification) (Sender, error) {
+	const op = "Server.findSender"
+
+	sender, ok := s.senders[n.Channel]
+	if !ok {
+		return ConsoleSender{}, fmt.Errorf("%s: %w", op, ErrInvalidChannel)
+	}
+
+	return sender, nil
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -147,28 +178,29 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
+	const op = "Server.getNotification"
+
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		// w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error": "Invalid notification ID"}`))
+		http.Error(w, fmt.Errorf("%s: %w", op, ErrInvalidId).Error(), http.StatusBadRequest)
 		return
 	}
 
-	n, ok := s.notifications[id]
-	if !ok {
-		// w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error": "Notification not found"}`))
+	n, err := s.findNotification(id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			http.Error(w, fmt.Errorf("%s: %w", op, err).Error(), http.StatusNotFound)
+			return
+		}
+
+		http.Error(w, fmt.Errorf("%s: %w", op, ErrInternal).Error(), http.StatusInternalServerError)
 		return
 	}
 
 	js, err := json.Marshal(n)
 	if err != nil {
-		// w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error": "Failed to marshal notification"}`))
+		http.Error(w, fmt.Errorf("%s: %w", op, ErrFailedMarshal).Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -196,6 +228,8 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
+	const op = "Server.createNotification"
+
 	var n Notification
 	err := json.NewDecoder(r.Body).Decode(&n)
 	if err != nil {
@@ -207,24 +241,20 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 
 	err = n.Validate()
 	if err != nil {
-		errResponse := struct {
-			Error string `json:"error"`
-		}{
-			Error: err.Error(),
-		}
-
-		js, _ := json.Marshal(errResponse)
-		// w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write(js)
+		http.Error(w, fmt.Errorf("%s: %w", op, err).Error(), http.StatusBadRequest)
 		return
 	}
 
-	sender, ok := s.senders[n.Channel]
-	if !ok {
-		s.logger.Error("Invalid channel", "channel", n.Channel)
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error": "Invalid channel"}`))
+	sender, err := s.findSender(n)
+	if err != nil {
+		if errors.Is(err, ErrInvalidChannel) {
+			s.logger.Error("Invalid channel", "channel", n.Channel)
+			http.Error(w, fmt.Errorf("%s: %w", op, err).Error(), http.StatusBadRequest)
+			return
+		}
+
+		s.logger.Error("Cant find channel", "channel", n.Channel)
+		http.Error(w, fmt.Errorf("%s: %w", op, err).Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -239,8 +269,8 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(n)
 	if err != nil {
-		s.logger.Error("Marshal error", "error", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		s.logger.Error(ErrFailedMarshal.Error(), "error", err)
+		http.Error(w, fmt.Errorf("%s: %w", op, ErrFailedMarshal).Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -270,11 +300,13 @@ func contentType(next http.Handler) http.Handler {
 }
 
 func NewServer(logger *slog.Logger, senders map[string]Sender) (*Server, error) {
+	const op = "NewServer"
+
 	if logger == nil {
-		return nil, fmt.Errorf("logger is required")
+		return nil, fmt.Errorf("%s: logger is required", op)
 	}
 	if len(senders) == 0 {
-		return nil, fmt.Errorf("senders is required")
+		return nil, fmt.Errorf("%s: senders is required", op)
 	}
 
 	return &Server{
