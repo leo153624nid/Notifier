@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-func WriteAuditLog(path string, notifications map[int]Notification) error {
+func WriteAuditLog(path string, notifications []Notification) error {
 	const op = "WriteAuditLog"
 
 	f, err := os.Create(path)

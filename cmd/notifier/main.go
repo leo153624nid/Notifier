@@ -31,21 +31,17 @@ type EmailSender = sender.EmailSender
 type TelegramSender = sender.TelegramSender
 
 type Server struct {
-	notifications map[int]Notification
-	nextID        int
-	logger        *slog.Logger
-	senders       map[string]Sender
+	db      *sql.DB
+	logger  *slog.Logger
+	senders map[string]Sender
 }
-
-// var notifications []Notification // slice
-// var notifications map[int]Notification{} // empty map
 
 func (s *Server) findNotification(id int) (Notification, error) {
 	const op = "Server.findNotification"
 
-	n, ok := s.notifications[id]
-	if !ok {
-		return notification.Notification{}, fmt.Errorf("%s: %w", op, notification.ErrNotFound)
+	n, err := notificationById(s.db, id)
+	if err != nil {
+		return Notification{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return n, nil
@@ -124,19 +120,26 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
-	var all []Notification
-	for _, n := range s.notifications {
-		all = append(all, n)
-	}
+	const op = "Server.listNotifications"
 
-	js, err := json.Marshal(all)
+	notifications, err := getAllNotifications(s.db)
 	if err != nil {
-		s.logger.Error("Marshal error", "error", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		s.logger.Error("list notifications failed", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	// w.Header().Set("Content-Type", "application/json")
+	if notifications == nil {
+		notifications = []Notification{}
+	}
+
+	js, err := json.Marshal(notifications)
+	if err != nil {
+		s.logger.Error("Marshal error", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	w.Write(js)
 }
@@ -144,10 +147,9 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	const op = "Server.createNotification"
 
-	var n notification.Notification
+	var n Notification
 	err := json.NewDecoder(r.Body).Decode(&n)
 	if err != nil {
-		// w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"error": "Invalid request payload"}`))
 		return
@@ -155,7 +157,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 
 	err = n.Validate()
 	if err != nil {
-		http.Error(w, fmt.Errorf("%s: %w", op, err).Error(), http.StatusBadRequest)
+		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
@@ -163,18 +165,23 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, notification.ErrInvalidChannel) {
 			s.logger.Error("Invalid channel", "channel", n.Channel)
-			http.Error(w, fmt.Errorf("%s: %w", op, err).Error(), http.StatusBadRequest)
+			http.Error(w, "invalid channel", http.StatusBadRequest)
 			return
 		}
 
 		s.logger.Error("Cant find channel", "channel", n.Channel)
-		http.Error(w, fmt.Errorf("%s: %w", op, err).Error(), http.StatusInternalServerError)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	s.nextID++
-	n.ID = s.nextID
-	s.notifications[n.ID] = n
+	id, err := insertNotification(s.db, n)
+	if err != nil {
+		s.logger.Error("Failed insert notification to db", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	n.ID = id
 
 	err = sender.Send(n)
 	if err != nil {
@@ -184,15 +191,10 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	js, err := json.Marshal(n)
 	if err != nil {
 		s.logger.Error(notification.ErrFailedMarshal.Error(), "error", err)
-		http.Error(
-			w,
-			fmt.Errorf("%s: %w", op, notification.ErrFailedMarshal).Error(),
-			http.StatusInternalServerError,
-		)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	// w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	w.Write(js)
 }
@@ -217,9 +219,12 @@ func contentType(next http.Handler) http.Handler {
 	})
 }
 
-func NewServer(logger *slog.Logger, senders map[string]Sender) (*Server, error) {
+func NewServer(db *sql.DB, logger *slog.Logger, senders map[string]Sender) (*Server, error) {
 	const op = "NewServer"
 
+	if db == nil {
+		return nil, fmt.Errorf("%s: db is required", op)
+	}
 	if logger == nil {
 		return nil, fmt.Errorf("%s: logger is required", op)
 	}
@@ -228,25 +233,31 @@ func NewServer(logger *slog.Logger, senders map[string]Sender) (*Server, error) 
 	}
 
 	return &Server{
-		notifications: map[int]Notification{},
-		nextID:        0,
-		logger:        logger,
-		senders:       senders,
+		db:      db,
+		logger:  logger,
+		senders: senders,
 	}, nil
 }
 
 func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
 	const op = "Server.exportNotification"
 
-	err := WriteAuditLog("audit.log", s.notifications)
+	notifications, err := getAllNotifications(s.db)
+	if err != nil {
+		s.logger.Error("list notifications failed", "op", op, "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	err = WriteAuditLog("audit.log", notifications)
 	if err != nil {
 		s.logger.Error("export failed", "op", op, "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	// w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"exported": len(s.notifications)})
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]int{"exported": len(notifications)})
 }
 
 func main() {
@@ -290,28 +301,10 @@ func main() {
 		"telegram": LoggingSender{Sender: TelegramSender{}, Logger: logger},
 	}
 
-	s, err := NewServer(logger, senders)
+	s, err := NewServer(db, logger, senders)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "server: %s\n", err)
 		os.Exit(1)
-	}
-
-	s.nextID++
-	s.notifications[s.nextID] = Notification{
-		ID:        s.nextID,
-		Recipient: "111",
-		Subject:   "Test Notification",
-		Body:      "This is a test notification.",
-		Channel:   "email",
-		IsUrgent:  false,
-	}
-	s.nextID++
-	s.notifications[s.nextID] = Notification{
-		ID:        s.nextID,
-		Recipient: "222",
-		Body:      "This is another test notification.",
-		Channel:   "console",
-		IsUrgent:  true,
 	}
 
 	s.logger.Info("starting server", "app", appName, "version", appVersion, "port", 8080)
