@@ -231,6 +231,20 @@ func NewServer(logger *slog.Logger, senders map[string]Sender) (*Server, error) 
 	}, nil
 }
 
+func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
+	const op = "Server.exportNotification"
+
+	err := WriteAuditLog("audit.log", s.notifications)
+	if err != nil {
+		s.logger.Error("export failed", "op", op, "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"exported": len(s.notifications)})
+}
+
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	senders := map[string]Sender{
@@ -266,8 +280,9 @@ func main() {
 	s.logger.Info("Starting server", "app", appName, "version", appVersion, "port", 8080)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", s.healthHandler)
+	mux.HandleFunc("GET /health", s.healthHandler)
 	mux.HandleFunc("GET /api/notifications", s.listNotifications)
+	mux.HandleFunc("GET /api/notifications/export", s.exportNotification)
 	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
 	mux.HandleFunc("POST /api/notifications", s.createNotification)
 
