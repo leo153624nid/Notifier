@@ -10,8 +10,12 @@ import (
 	"strconv"
 	"time"
 
+	"database/sql"
+	"notifier/internal/config"
 	"notifier/internal/notification"
 	"notifier/internal/sender"
+
+	_ "github.com/jackc/pgx/v5/stdlib" // need to init driver, but nothing to call
 )
 
 const (
@@ -247,6 +251,39 @@ func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	pgCfg := config.LoadPostgresConfig()
+	db, err := sql.Open("pgx", pgCfg.DSN())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sql.open: %s\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "db ping failed: %s\n", err)
+		os.Exit(1)
+	}
+	logger.Info("database connected")
+
+	const createTable = `
+	CREATE TABLE IF NOT EXISTS notifications (
+		id SERIAL PRIMARY KEY,
+		recipient TEXT NOT NULL,
+		subject TEXT NOT NULL,
+		body TEXT,
+		channel TEXT,
+		is_urgent BOOLEAN DEFAULT FALSE
+	)
+	`
+	_, err = db.Exec(createTable)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create table failed: %s\n", err)
+		os.Exit(1)
+	}
+	logger.Info("table ready")
+
 	senders := map[string]Sender{
 		"console":  LoggingSender{Sender: sender.NewConsoleSender(os.Stdout), Logger: logger},
 		"email":    LoggingSender{Sender: sender.NewEmailSender(os.Stdout), Logger: logger},
@@ -277,7 +314,7 @@ func main() {
 		IsUrgent:  true,
 	}
 
-	s.logger.Info("Starting server", "app", appName, "version", appVersion, "port", 8080)
+	s.logger.Info("starting server", "app", appName, "version", appVersion, "port", 8080)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.healthHandler)
