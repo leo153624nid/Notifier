@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -9,81 +8,15 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"notifier/internal/notification"
+	"notifier/internal/sender"
 )
-
-type MockSender struct {
-	Calls []Notification
-}
-
-func (m *MockSender) Send(n Notification) error {
-	m.Calls = append(m.Calls, n)
-	return nil
-}
-
-func TestConsoleSender(t *testing.T) {
-	var buf bytes.Buffer
-	sender := NewConsoleSender(&buf)
-	n := Notification{
-		ID:        1,
-		Recipient: "test@example.com",
-		Subject:   "Test Notification",
-		Body:      "This is a test notification.",
-		Channel:   "console",
-		IsUrgent:  false,
-	}
-
-	err := sender.Send(n)
-	if err != nil {
-		t.Fatalf("Send() error: %s", err)
-	}
-
-	got := buf.String()
-	want := "[console] to test@example.com | Test Notification\n"
-	if got != want {
-		t.Errorf("Send() = %q, want %q", got, want)
-	}
-}
-
-func TestValidate(t *testing.T) {
-	tests := []struct {
-		name    string
-		n       Notification
-		wantErr bool
-	}{
-		{
-			name:    "valid notification",
-			n:       Notification{Recipient: "some", Channel: "email"},
-			wantErr: false,
-		},
-		{
-			name:    "empty recipient",
-			n:       Notification{Recipient: "", Channel: "email"},
-			wantErr: true,
-		},
-		{
-			name:    "empty channel",
-			n:       Notification{Recipient: "some", Channel: ""},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.n.Validate()
-			if tt.wantErr && err == nil {
-				t.Errorf("expected error, got nil")
-			}
-			if !tt.wantErr && err != nil {
-				t.Errorf("Validate() error: %s", err)
-			}
-		})
-	}
-}
 
 func TestHealthHandler(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	senders := map[string]Sender{
-		"console": &MockSender{},
+		"console": &sender.MockSender{},
 	}
 
 	s, err := NewServer(logger, senders)
@@ -134,7 +67,7 @@ func TestCreateNotification(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-			mock := &MockSender{}
+			mock := &sender.MockSender{}
 			senders := map[string]Sender{
 				"email": mock,
 			}
@@ -191,7 +124,7 @@ func TestGetNotification(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-			mock := &MockSender{}
+			mock := &sender.MockSender{}
 			senders := map[string]Sender{
 				"email": mock,
 			}
@@ -255,7 +188,7 @@ func TestListNotifications(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-			mock := &MockSender{}
+			mock := &sender.MockSender{}
 			senders := map[string]Sender{
 				"email": mock,
 			}
@@ -296,7 +229,7 @@ func TestListNotifications(t *testing.T) {
 
 func TestErrNotFoundThroughChain(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	mock := &MockSender{}
+	mock := &sender.MockSender{}
 	senders := map[string]Sender{
 		"email": mock,
 	}
@@ -312,7 +245,7 @@ func TestErrNotFoundThroughChain(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	if !errors.Is(err, ErrNotFound) {
+	if !errors.Is(err, notification.ErrNotFound) {
 		t.Errorf("error in not ErrNotFound, got: %s", err)
 	}
 }
