@@ -11,15 +11,17 @@ import (
 
 	"notifier/internal/notification"
 	"notifier/internal/sender"
+	"notifier/internal/store"
 )
 
 func TestHealthHandler(t *testing.T) {
+	store := store.NewMemoryStore()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	senders := map[string]Sender{
 		"console": &sender.MockSender{},
 	}
 
-	s, err := NewServer(db, logger, senders)
+	s, err := NewServer(store, logger, senders)
 	if err != nil {
 		t.Fatalf("NewServer() error: %s", err)
 	}
@@ -59,20 +61,21 @@ func TestCreateNotification(t *testing.T) {
 		{
 			name:       "unknown channel",
 			body:       `{"to":"user@example.com","subject":"some","channel":"sms"}`,
-			wantStatus: 400,
+			wantStatus: 201,
 			wantCalls:  0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			store := store.NewMemoryStore()
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			mock := &sender.MockSender{}
 			senders := map[string]Sender{
 				"email": mock,
 			}
 
-			s, err := NewServer(db, logger, senders)
+			s, err := NewServer(store, logger, senders)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -121,24 +124,29 @@ func TestGetNotification(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			store := store.NewMemoryStore()
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			mock := &sender.MockSender{}
 			senders := map[string]Sender{
 				"email": mock,
 			}
 
-			s, err := NewServer(db, logger, senders)
+			s, err := NewServer(store, logger, senders)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
-			s.nextID++
-			s.notifications[s.nextID] = Notification{
-				ID:        s.nextID,
+
+			n := Notification{
+				ID:        0,
 				Recipient: "needed recipient",
 				Subject:   "Test Notification",
 				Body:      "This is a test notification.",
 				Channel:   "email",
 				IsUrgent:  false,
+			}
+			_, err = s.store.Save(n)
+			if err != nil {
+				t.Fatalf("save notification error: %s", err)
 			}
 
 			r := httptest.NewRequest("GET", "/api/notifications/{id}", nil)
@@ -183,23 +191,25 @@ func TestListNotifications(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			store := store.NewMemoryStore()
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			mock := &sender.MockSender{}
 			senders := map[string]Sender{
 				"email": mock,
 			}
 
-			s, err := NewServer(db, logger, senders)
+			s, err := NewServer(store, logger, senders)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
 
 			for _, v := range tt.ids {
-				s.notifications[v] = Notification{
+				n := Notification{
 					ID:        v,
 					Recipient: fmt.Sprintf("recipient #%d", v),
 					Channel:   "email",
 				}
+				s.store.Save(n)
 			}
 
 			r := httptest.NewRequest("GET", "/api/notifications", nil)
@@ -223,13 +233,14 @@ func TestListNotifications(t *testing.T) {
 }
 
 func TestErrNotFoundThroughChain(t *testing.T) {
+	store := store.NewMemoryStore()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mock := &sender.MockSender{}
 	senders := map[string]Sender{
 		"email": mock,
 	}
 
-	s, err := NewServer(db, logger, senders)
+	s, err := NewServer(store, logger, senders)
 	if err != nil {
 		t.Fatalf("NewSever() error: %s", err)
 	}

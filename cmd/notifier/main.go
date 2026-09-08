@@ -76,7 +76,7 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 	n, err := s.store.GetById(id)
 	if err != nil {
 		if errors.Is(err, notification.ErrNotFound) {
-			http.Error(w, fmt.Errorf("%s: %w", op, err).Error(), http.StatusNotFound)
+			http.Error(w, "error: not found", http.StatusNotFound)
 			return
 		}
 
