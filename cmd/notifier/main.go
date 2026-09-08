@@ -81,14 +81,14 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.logger.Error("%s: %w", op, err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, "error: internal error", http.StatusInternalServerError)
 		return
 	}
 
 	js, err := json.Marshal(n)
 	if err != nil {
 		s.logger.Error("%s: %w", op, err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, "error: internal error", http.StatusInternalServerError)
 		return
 	}
 
