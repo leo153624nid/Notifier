@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,18 +26,10 @@ const (
 	appName    = "Notifier"
 )
 
-type Store = store.Store
-type Notification = notification.Notification
-type Sender = sender.Sender
-type LoggingSender = sender.LoggingSender
-type ConsoleSender = sender.ConsoleSender
-type EmailSender = sender.EmailSender
-type TelegramSender = sender.TelegramSender
-
 type Server struct {
-	store   Store
+	store   store.Store
 	logger  *slog.Logger
-	senders map[string]Sender
+	senders map[string]sender.Sender
 	wg      sync.WaitGroup
 }
 
@@ -113,7 +106,7 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if notifications == nil {
-		notifications = []Notification{}
+		notifications = []notification.Notification{}
 	}
 
 	js, err := json.Marshal(notifications)
@@ -130,7 +123,7 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	const op = "Server.createNotification"
 
-	var n Notification
+	var n notification.Notification
 	err := json.NewDecoder(r.Body).Decode(&n)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -157,7 +150,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	sender, ok := s.senders[n.Channel]
 	if ok {
 		s.wg.Add(1)
-		go func(n Notification) {
+		go func(n notification.Notification) {
 			defer s.wg.Done()
 			err := sender.Send(n)
 			if err != nil {
@@ -178,46 +171,6 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusAccepted)
 	w.Write(js)
-}
-
-func (s *Server) logRequest(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		s.logger.Info(
-			"request completed",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"duration", time.Since(start),
-		)
-	})
-}
-
-func contentType(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		next.ServeHTTP(w, r)
-	})
-}
-
-func NewServer(store Store, logger *slog.Logger, senders map[string]Sender) (*Server, error) {
-	const op = "NewServer"
-
-	if store == nil {
-		return nil, fmt.Errorf("%s: store is required", op)
-	}
-	if logger == nil {
-		return nil, fmt.Errorf("%s: logger is required", op)
-	}
-	if len(senders) == 0 {
-		return nil, fmt.Errorf("%s: senders is required", op)
-	}
-
-	return &Server{
-		store:   store,
-		logger:  logger,
-		senders: senders,
-	}, nil
 }
 
 func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
@@ -241,12 +194,72 @@ func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int{"exported": len(notifications)})
 }
 
+func (s *Server) logRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		s.logger.Info(
+			"request completed",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"duration", time.Since(start),
+		)
+	})
+}
+
+func contentType(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func NewServer(
+	store store.Store,
+	logger *slog.Logger,
+	senders map[string]sender.Sender,
+) (*Server, error) {
+	const op = "NewServer"
+
+	if store == nil {
+		return nil, fmt.Errorf("%s: store is required", op)
+	}
+	if logger == nil {
+		return nil, fmt.Errorf("%s: logger is required", op)
+	}
+	if len(senders) == 0 {
+		return nil, fmt.Errorf("%s: senders is required", op)
+	}
+
+	return &Server{
+		store:   store,
+		logger:  logger,
+		senders: senders,
+	}, nil
+}
+
+func parseLevel(s string) slog.Level {
+	levels := map[string]slog.Level{
+		"debug": slog.LevelDebug,
+		"info":  slog.LevelInfo,
+		"warn":  slog.LevelWarn,
+		"error": slog.LevelError,
+	}
+
+	if lvl, ok := levels[strings.ToLower(s)]; ok {
+		return lvl
+	}
+
+	return slog.LevelInfo
+}
+
 func main() {
-	config := config.Load()
+	cfg := config.Load()
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	opts := &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, opts)).With("service", appName, "version", appVersion)
 
-	db, err := sql.Open("pgx", config.DSN)
+	db, err := sql.Open("pgx", cfg.DSN)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sql.open: %s\n", err)
 		os.Exit(1)
@@ -278,12 +291,12 @@ func main() {
 	}
 	logger.Info("table ready")
 
-	store := store.NewPostgresStore(db)
+	store := store.NewPostgresStore(db, logger)
 
-	senders := map[string]Sender{
-		"console":  LoggingSender{Sender: sender.NewConsoleSender(os.Stdout), Logger: logger},
-		"email":    LoggingSender{Sender: sender.NewEmailSender(os.Stdout), Logger: logger},
-		"telegram": LoggingSender{Sender: TelegramSender{}, Logger: logger},
+	senders := map[string]sender.Sender{
+		"console":  sender.LoggingSender{Sender: sender.NewConsoleSender(os.Stdout), Logger: logger},
+		"email":    sender.LoggingSender{Sender: sender.NewEmailSender(os.Stdout), Logger: logger},
+		"telegram": sender.LoggingSender{Sender: sender.TelegramSender{}, Logger: logger},
 	}
 
 	s, err := NewServer(store, logger, senders)
@@ -293,7 +306,7 @@ func main() {
 	}
 	defer s.OnShutdown()
 
-	s.logger.Info("starting server", "app", appName, "version", appVersion, "port", config.Port)
+	s.logger.Info("starting server", "port", cfg.Port)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.healthHandler)
@@ -302,7 +315,7 @@ func main() {
 	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
 	mux.HandleFunc("POST /api/notifications", s.createNotification)
 
-	err = http.ListenAndServe(config.Port, s.logRequest(contentType(mux)))
+	err = http.ListenAndServe(cfg.Port, s.logRequest(contentType(mux)))
 	if err != nil {
 		s.logger.Error("Error starting server", "error", err)
 	}

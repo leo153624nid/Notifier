@@ -4,19 +4,24 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"notifier/internal/notification"
 )
 
 type PostgresStore struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
-func NewPostgresStore(db *sql.DB) *PostgresStore {
-	return &PostgresStore{db: db}
+func NewPostgresStore(db *sql.DB, logger *slog.Logger) *PostgresStore {
+	return &PostgresStore{
+		db:     db,
+		logger: logger,
+	}
 }
 
-func (s *PostgresStore) Save(n Notification) (int, error) {
+func (s *PostgresStore) Save(n notification.Notification) (int, error) {
 	const op = "PostgresStore.Save"
 
 	var id int
@@ -33,7 +38,7 @@ func (s *PostgresStore) Save(n Notification) (int, error) {
 	return id, nil
 }
 
-func (s *PostgresStore) GetAll() ([]Notification, error) {
+func (s *PostgresStore) GetAll() ([]notification.Notification, error) {
 	const op = "PostgresStore.GetAll"
 
 	rows, err := s.db.Query(
@@ -45,9 +50,9 @@ func (s *PostgresStore) GetAll() ([]Notification, error) {
 
 	defer rows.Close()
 
-	var result []Notification
+	var result []notification.Notification
 	for rows.Next() {
-		var n Notification
+		var n notification.Notification
 		err := rows.Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
 		if err != nil {
 			return nil, fmt.Errorf("%s: scan: %w", op, err)
@@ -64,20 +69,20 @@ func (s *PostgresStore) GetAll() ([]Notification, error) {
 	return result, nil
 }
 
-func (s *PostgresStore) GetById(id int) (Notification, error) {
+func (s *PostgresStore) GetById(id int) (notification.Notification, error) {
 	const op = "PostgresStore.GetById"
 
-	var n Notification
+	var n notification.Notification
 	err := s.db.QueryRow(
 		`SELECT id, recipient, subject, body, channel, is_urgent, status FROM notifications WHERE id=$1`,
 		id,
 	).Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		return Notification{}, fmt.Errorf("%s: scan: %w", op, notification.ErrNotFound)
+		return notification.Notification{}, fmt.Errorf("%s: scan: %w", op, notification.ErrNotFound)
 	}
 	if err != nil {
-		return Notification{}, fmt.Errorf("%s: scan: %w", op, err)
+		return notification.Notification{}, fmt.Errorf("%s: scan: %w", op, err)
 	}
 
 	return n, nil

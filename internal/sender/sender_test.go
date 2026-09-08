@@ -3,12 +3,14 @@ package sender
 import (
 	"bytes"
 	"testing"
+
+	"notifier/internal/notification"
 )
 
 func TestConsoleSender(t *testing.T) {
 	var buf bytes.Buffer
 	sender := NewConsoleSender(&buf)
-	n := Notification{
+	n := notification.Notification{
 		ID:        1,
 		Recipient: "test@example.com",
 		Subject:   "Test Notification",

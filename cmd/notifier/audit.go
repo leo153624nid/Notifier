@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
+	"notifier/internal/notification"
 	"os"
 )
 
-func WriteAuditLog(path string, notifications []Notification) error {
+func WriteAuditLog(path string, notifications []notification.Notification) error {
 	const op = "WriteAuditLog"
 
 	f, err := os.Create(path)

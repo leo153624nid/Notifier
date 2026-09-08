@@ -17,7 +17,7 @@ import (
 func TestHealthHandler(t *testing.T) {
 	store := store.NewMemoryStore()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	senders := map[string]Sender{
+	senders := map[string]sender.Sender{
 		"console": &sender.MockSender{},
 	}
 
@@ -77,7 +77,7 @@ func TestCreateNotification(t *testing.T) {
 			store := store.NewMemoryStore()
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			mock := &sender.MockSender{}
-			senders := map[string]Sender{
+			senders := map[string]sender.Sender{
 				"email": mock,
 			}
 
@@ -133,7 +133,7 @@ func TestGetNotification(t *testing.T) {
 			store := store.NewMemoryStore()
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			mock := &sender.MockSender{}
-			senders := map[string]Sender{
+			senders := map[string]sender.Sender{
 				"email": mock,
 			}
 
@@ -142,7 +142,7 @@ func TestGetNotification(t *testing.T) {
 				t.Fatalf("NewSever() error: %s", err)
 			}
 
-			n := Notification{
+			n := notification.Notification{
 				ID:        0,
 				Recipient: "needed recipient",
 				Subject:   "Test Notification",
@@ -200,7 +200,7 @@ func TestListNotifications(t *testing.T) {
 			store := store.NewMemoryStore()
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 			mock := &sender.MockSender{}
-			senders := map[string]Sender{
+			senders := map[string]sender.Sender{
 				"email": mock,
 			}
 
@@ -210,7 +210,7 @@ func TestListNotifications(t *testing.T) {
 			}
 
 			for _, v := range tt.ids {
-				n := Notification{
+				n := notification.Notification{
 					ID:        v,
 					Recipient: fmt.Sprintf("recipient #%d", v),
 					Channel:   "email",
@@ -242,7 +242,7 @@ func TestErrNotFoundThroughChain(t *testing.T) {
 	store := store.NewMemoryStore()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	mock := &sender.MockSender{}
-	senders := map[string]Sender{
+	senders := map[string]sender.Sender{
 		"email": mock,
 	}
 

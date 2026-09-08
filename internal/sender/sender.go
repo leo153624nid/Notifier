@@ -8,19 +8,17 @@ import (
 	"os"
 )
 
-type Notification = notification.Notification
-
 type MockSender struct {
 	Calls []notification.Notification
 }
 
-func (m *MockSender) Send(n Notification) error {
+func (m *MockSender) Send(n notification.Notification) error {
 	m.Calls = append(m.Calls, n)
 	return nil
 }
 
 type Sender interface {
-	Send(Notification) error
+	Send(notification.Notification) error
 }
 
 type LoggingSender struct {
@@ -36,7 +34,7 @@ type EmailSender struct {
 }
 type TelegramSender struct{}
 
-func (ls LoggingSender) Send(n Notification) error {
+func (ls LoggingSender) Send(n notification.Notification) error {
 	ls.Logger.Info("sending", "to", n.Recipient, "channel", n.Channel)
 	err := ls.Sender.Send(n)
 	if err != nil {
@@ -61,17 +59,17 @@ func NewEmailSender(w io.Writer) *EmailSender {
 	return &EmailSender{w}
 }
 
-func (cs ConsoleSender) Send(n Notification) error {
+func (cs ConsoleSender) Send(n notification.Notification) error {
 	_, err := fmt.Fprintf(cs.w, "[console] to %s | %s\n", n.Recipient, n.Subject)
 	return err
 }
 
-func (es EmailSender) Send(n Notification) error {
+func (es EmailSender) Send(n notification.Notification) error {
 	_, err := fmt.Fprintf(es.w, "[email] to %s | %s\n", n.Recipient, n.Subject)
 	return err
 }
 
-func (tg TelegramSender) Send(n Notification) error {
+func (tg TelegramSender) Send(n notification.Notification) error {
 	fmt.Printf("[telegram] to %s | %s\n", n.Recipient, n.Subject)
 	return nil
 }

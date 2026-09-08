@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"notifier/internal/notification"
 )
 
 func TestMemoryStore_ConcurrentSave(t *testing.T) {
@@ -16,7 +18,7 @@ func TestMemoryStore_ConcurrentSave(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 
-			n := Notification{
+			n := notification.Notification{
 				Recipient: fmt.Sprintf("user%d@example.com", i),
 				Subject:   "Test",
 				Channel:   "console",

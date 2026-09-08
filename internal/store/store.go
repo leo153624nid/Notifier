@@ -4,11 +4,9 @@ import (
 	"notifier/internal/notification"
 )
 
-type Notification = notification.Notification
-
 type Store interface {
-	Save(n Notification) (int, error)
-	GetAll() ([]Notification, error)
-	GetById(id int) (Notification, error)
+	Save(n notification.Notification) (int, error)
+	GetAll() ([]notification.Notification, error)
+	GetById(id int) (notification.Notification, error)
 	UpdateStatus(id int, status string) error
 }

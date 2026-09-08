@@ -9,18 +9,18 @@ import (
 
 type MemoryStore struct {
 	mu            sync.Mutex
-	notifications map[int]Notification
+	notifications map[int]notification.Notification
 	nextID        int
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		notifications: make(map[int]Notification),
+		notifications: make(map[int]notification.Notification),
 		nextID:        0,
 	}
 }
 
-func (s *MemoryStore) Save(n Notification) (int, error) {
+func (s *MemoryStore) Save(n notification.Notification) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -32,11 +32,11 @@ func (s *MemoryStore) Save(n Notification) (int, error) {
 	return n.ID, nil
 }
 
-func (s *MemoryStore) GetAll() ([]Notification, error) {
+func (s *MemoryStore) GetAll() ([]notification.Notification, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result := make([]Notification, 0, len(s.notifications))
+	result := make([]notification.Notification, 0, len(s.notifications))
 
 	for _, n := range s.notifications {
 		result = append(result, n)
@@ -45,7 +45,7 @@ func (s *MemoryStore) GetAll() ([]Notification, error) {
 	return result, nil
 }
 
-func (s *MemoryStore) GetById(id int) (Notification, error) {
+func (s *MemoryStore) GetById(id int) (notification.Notification, error) {
 	const op = "MemoryStore.GetById"
 
 	s.mu.Lock()
@@ -54,7 +54,7 @@ func (s *MemoryStore) GetById(id int) (Notification, error) {
 	n, ok := s.notifications[id]
 	if !ok {
 		err := fmt.Errorf("%s: %w", op, notification.ErrNotFound)
-		return Notification{}, err
+		return notification.Notification{}, err
 	}
 
 	return n, nil
