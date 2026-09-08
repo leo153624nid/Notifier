@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // need to init driver, but nothing to call
@@ -36,6 +37,11 @@ type Server struct {
 	store   Store
 	logger  *slog.Logger
 	senders map[string]Sender
+	wg      sync.WaitGroup
+}
+
+func (s *Server) OnShutdown() {
+	s.wg.Wait()
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -150,15 +156,17 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 
 	sender, ok := s.senders[n.Channel]
 	if ok {
-		err := sender.Send(n)
-		if err != nil {
-			s.logger.Error("send failed", "id", id, "error", err)
-			_ = s.store.UpdateStatus(id, "failed")
-			n.Status = "failed"
-		} else {
-			_ = s.store.UpdateStatus(id, "sent")
-			n.Status = "sent"
-		}
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			err := sender.Send(n)
+			if err != nil {
+				s.logger.Error("send failed", "id", id, "error", err)
+				_ = s.store.UpdateStatus(id, "failed")
+			} else {
+				_ = s.store.UpdateStatus(id, "sent")
+			}
+		}()
 	}
 
 	js, err := json.Marshal(n)
@@ -168,7 +176,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusAccepted)
 	w.Write(js)
 }
 
@@ -282,6 +290,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "server: %s\n", err)
 		os.Exit(1)
 	}
+	defer s.OnShutdown()
 
 	s.logger.Info("starting server", "app", appName, "version", appVersion, "port", 8080)
 

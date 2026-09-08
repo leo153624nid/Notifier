@@ -49,7 +49,7 @@ func TestCreateNotification(t *testing.T) {
 		{
 			name:       "valid request",
 			body:       `{"to":"user@example.com","subject":"some","channel":"email"}`,
-			wantStatus: 201,
+			wantStatus: 202,
 			wantCalls:  1,
 		},
 		{
@@ -59,9 +59,15 @@ func TestCreateNotification(t *testing.T) {
 			wantCalls:  0,
 		},
 		{
+			name:       "empty channel",
+			body:       `{"to":"user@example.com","subject":"some","channel":""}`,
+			wantStatus: 400,
+			wantCalls:  0,
+		},
+		{
 			name:       "unknown channel",
 			body:       `{"to":"user@example.com","subject":"some","channel":"sms"}`,
-			wantStatus: 201,
+			wantStatus: 202,
 			wantCalls:  0,
 		},
 	}
