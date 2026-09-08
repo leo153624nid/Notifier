@@ -19,7 +19,7 @@ func TestHealthHandler(t *testing.T) {
 		"console": &sender.MockSender{},
 	}
 
-	s, err := NewServer(logger, senders)
+	s, err := NewServer(db, logger, senders)
 	if err != nil {
 		t.Fatalf("NewServer() error: %s", err)
 	}
@@ -71,10 +71,8 @@ func TestCreateNotification(t *testing.T) {
 			senders := map[string]Sender{
 				"email": mock,
 			}
-			s, err := NewServer(
-				logger,
-				senders,
-			)
+
+			s, err := NewServer(db, logger, senders)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -128,10 +126,8 @@ func TestGetNotification(t *testing.T) {
 			senders := map[string]Sender{
 				"email": mock,
 			}
-			s, err := NewServer(
-				logger,
-				senders,
-			)
+
+			s, err := NewServer(db, logger, senders)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -192,10 +188,8 @@ func TestListNotifications(t *testing.T) {
 			senders := map[string]Sender{
 				"email": mock,
 			}
-			s, err := NewServer(
-				logger,
-				senders,
-			)
+
+			s, err := NewServer(db, logger, senders)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -204,6 +198,7 @@ func TestListNotifications(t *testing.T) {
 				s.notifications[v] = Notification{
 					ID:        v,
 					Recipient: fmt.Sprintf("recipient #%d", v),
+					Channel:   "email",
 				}
 			}
 
@@ -233,15 +228,13 @@ func TestErrNotFoundThroughChain(t *testing.T) {
 	senders := map[string]Sender{
 		"email": mock,
 	}
-	s, err := NewServer(
-		logger,
-		senders,
-	)
+
+	s, err := NewServer(db, logger, senders)
 	if err != nil {
 		t.Fatalf("NewSever() error: %s", err)
 	}
 
-	_, err = s.findNotification(9999)
+	_, err = s.store.GetById(9999)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
