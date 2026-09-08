@@ -2,11 +2,13 @@ package store
 
 import (
 	"fmt"
+	"sync"
 
 	"notifier/internal/notification"
 )
 
 type MemoryStore struct {
+	mu            sync.Mutex
 	notifications map[int]Notification
 	nextID        int
 }
@@ -19,6 +21,9 @@ func NewMemoryStore() *MemoryStore {
 }
 
 func (s *MemoryStore) Save(n Notification) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.nextID++
 	n.ID = s.nextID
 	n.Status = "pending"
@@ -28,6 +33,9 @@ func (s *MemoryStore) Save(n Notification) (int, error) {
 }
 
 func (s *MemoryStore) GetAll() ([]Notification, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	result := make([]Notification, 0, len(s.notifications))
 
 	for _, n := range s.notifications {
@@ -39,6 +47,9 @@ func (s *MemoryStore) GetAll() ([]Notification, error) {
 
 func (s *MemoryStore) GetById(id int) (Notification, error) {
 	const op = "MemoryStore.GetById"
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	n, ok := s.notifications[id]
 	if !ok {
@@ -52,6 +63,9 @@ func (s *MemoryStore) GetById(id int) (Notification, error) {
 func (s *MemoryStore) UpdateStatus(id int, status string) error {
 	const op = "MemoryStore.UpdateStatus"
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	n, ok := s.notifications[id]
 	if !ok {
 		return fmt.Errorf("%s: %w", op, notification.ErrNotFound)
@@ -59,5 +73,6 @@ func (s *MemoryStore) UpdateStatus(id int, status string) error {
 
 	n.Status = status
 	s.notifications[id] = n
+
 	return nil
 }

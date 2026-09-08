@@ -157,7 +157,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	sender, ok := s.senders[n.Channel]
 	if ok {
 		s.wg.Add(1)
-		go func() {
+		go func(n Notification) {
 			defer s.wg.Done()
 			err := sender.Send(n)
 			if err != nil {
@@ -166,7 +166,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 			} else {
 				_ = s.store.UpdateStatus(id, "sent")
 			}
-		}()
+		}(n)
 	}
 
 	js, err := json.Marshal(n)
