@@ -242,10 +242,11 @@ func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	config := config.Load()
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	pgCfg := config.LoadPostgresConfig()
-	db, err := sql.Open("pgx", pgCfg.DSN())
+	db, err := sql.Open("pgx", config.DSN)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sql.open: %s\n", err)
 		os.Exit(1)
@@ -292,7 +293,7 @@ func main() {
 	}
 	defer s.OnShutdown()
 
-	s.logger.Info("starting server", "app", appName, "version", appVersion, "port", 8080)
+	s.logger.Info("starting server", "app", appName, "version", appVersion, "port", config.Port)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.healthHandler)
@@ -301,7 +302,7 @@ func main() {
 	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
 	mux.HandleFunc("POST /api/notifications", s.createNotification)
 
-	err = http.ListenAndServe(":8080", s.logRequest(contentType(mux)))
+	err = http.ListenAndServe(config.Port, s.logRequest(contentType(mux)))
 	if err != nil {
 		s.logger.Error("Error starting server", "error", err)
 	}
