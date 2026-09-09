@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"notifier/internal/notification"
 	"notifier/internal/sender"
@@ -90,6 +91,7 @@ func TestCreateNotification(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			s.createNotification(w, r)
+			time.Sleep(300 * time.Millisecond)
 
 			if w.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)

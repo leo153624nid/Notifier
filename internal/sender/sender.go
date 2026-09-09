@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+type Sender interface {
+	Send(ctx context.Context, n notification.Notification) error
+}
+
 type MockSender struct {
 	Calls []notification.Notification
 }
@@ -17,10 +21,6 @@ type MockSender struct {
 func (m *MockSender) Send(ctx context.Context, n notification.Notification) error {
 	m.Calls = append(m.Calls, n)
 	return nil
-}
-
-type Sender interface {
-	Send(ctx context.Context, n notification.Notification) error
 }
 
 type LoggingSender struct {
