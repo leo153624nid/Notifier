@@ -40,6 +40,7 @@ func (s *PostgresStore) Save(n notification.Notification) (int, error) {
 
 func (s *PostgresStore) GetAll() ([]notification.Notification, error) {
 	const op = "PostgresStore.GetAll"
+	var result []notification.Notification
 
 	rows, err := s.db.Query(
 		`SELECT id, recipient, subject, body, channel, is_urgent, status FROM notifications ORDER BY id`,
@@ -48,12 +49,15 @@ func (s *PostgresStore) GetAll() ([]notification.Notification, error) {
 		return nil, fmt.Errorf("%s: query: %w", op, err)
 	}
 
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			s.logger.Error("%s: close: %w", op, closeErr)
+		}
+	}()
 
-	var result []notification.Notification
 	for rows.Next() {
 		var n notification.Notification
-		err := rows.Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
+		err = rows.Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
 		if err != nil {
 			return nil, fmt.Errorf("%s: scan: %w", op, err)
 		}

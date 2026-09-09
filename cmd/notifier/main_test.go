@@ -215,7 +215,7 @@ func TestListNotifications(t *testing.T) {
 					Recipient: fmt.Sprintf("recipient #%d", v),
 					Channel:   "email",
 				}
-				s.store.Save(n)
+				_, _ = s.store.Save(n)
 			}
 
 			r := httptest.NewRequest("GET", "/api/notifications", nil)

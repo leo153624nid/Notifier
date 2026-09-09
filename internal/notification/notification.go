@@ -4,14 +4,15 @@ import (
 	"fmt"
 )
 
+//nolint:govet
 type Notification struct {
 	ID        int    `json:"id"`
 	Recipient string `json:"to"`
 	Subject   string `json:"subject"`
 	Body      string `json:"body"`
 	Channel   string `json:"channel"`
-	IsUrgent  bool   `json:"urgent"`
 	Status    string `json:"status"`
+	IsUrgent  bool   `json:"urgent"`
 }
 
 func (n Notification) Validate() error {

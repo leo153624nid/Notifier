@@ -14,7 +14,9 @@ func WriteAuditLog(path string, notifications []notification.Notification) error
 		return fmt.Errorf("%s: create: %w", op, err)
 	}
 
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	for _, n := range notifications {
 		_, err := fmt.Fprintf(f, "id:%d recipient:%s subject:%s\n", n.ID, n.Recipient, n.Subject)

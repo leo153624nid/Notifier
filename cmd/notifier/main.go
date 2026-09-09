@@ -55,9 +55,8 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// w.Header().Set("Content-type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(js)
+	_, _ = w.Write(js)
 }
 
 func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +67,7 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		bytes := fmt.Sprintf(`{"error": "%s"}`, notification.ErrInvalidId.Error())
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(bytes))
+		_, _ = w.Write([]byte(bytes))
 		return
 	}
 
@@ -92,7 +91,7 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(js)
+	_, _ = w.Write(js)
 }
 
 func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +99,7 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 
 	notifications, err := s.store.GetAll()
 	if err != nil {
-		s.logger.Error("list notifications failed", "error", err)
+		s.logger.Error("%s: getAll: %w", op, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -111,13 +110,13 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(notifications)
 	if err != nil {
-		s.logger.Error("Marshal error", "error", err)
+		s.logger.Error("%s: marshal: %w", op, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(js)
+	_, _ = w.Write(js)
 }
 
 func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +126,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&n)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error": "Invalid request payload"}`))
+		_, _ = w.Write([]byte(`{"error": "Invalid request payload"}`))
 		return
 	}
 
@@ -152,7 +151,8 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 		s.wg.Add(1)
 		go func(n notification.Notification) {
 			defer s.wg.Done()
-			err := sender.Send(n)
+
+			err = sender.Send(n)
 			if err != nil {
 				s.logger.Error("send failed", "id", id, "error", err)
 				_ = s.store.UpdateStatus(id, "failed")
@@ -170,7 +170,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusAccepted)
-	w.Write(js)
+	_, _ = w.Write(js)
 }
 
 func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +191,7 @@ func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]int{"exported": len(notifications)})
+	_ = json.NewEncoder(w).Encode(map[string]int{"exported": len(notifications)})
 }
 
 func (s *Server) logRequest(next http.Handler) http.Handler {
@@ -264,7 +264,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "sql.open: %s\n", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	err = db.Ping()
 	if err != nil {

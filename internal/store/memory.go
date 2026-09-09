@@ -8,9 +8,9 @@ import (
 )
 
 type MemoryStore struct {
-	mu            sync.Mutex
 	notifications map[int]notification.Notification
 	nextID        int
+	mu            sync.Mutex
 }
 
 func NewMemoryStore() *MemoryStore {
