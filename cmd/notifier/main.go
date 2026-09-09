@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,6 +38,10 @@ type Server struct {
 	senders map[string]sender.Sender
 	wg      sync.WaitGroup
 }
+
+type ctxKey struct{}
+
+var requestIDKey = ctxKey{}
 
 func (s *Server) OnShutdown() {
 	s.wg.Wait()
@@ -126,6 +132,9 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	const op = "Server.createNotification"
 
+	reqID := getRequestID(r.Context())
+	reqLogger := s.logger.With("request_id", reqID)
+
 	var n notification.Notification
 	err := json.NewDecoder(r.Body).Decode(&n)
 	if err != nil {
@@ -161,9 +170,10 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 
 			err = sender.Send(ctx, n)
 			if err != nil {
-				s.logger.Error("send failed", "id", id, "error", err)
+				reqLogger.Error("send failed", "id", id, "error", err)
 				_ = s.store.UpdateStatus(id, "failed")
 			} else {
+				reqLogger.Info("notification sent", "id", id, "channel", n.Channel)
 				_ = s.store.UpdateStatus(id, "sent")
 			}
 		}(n)
@@ -210,6 +220,7 @@ func (s *Server) logRequest(next http.Handler) http.Handler {
 			"method", r.Method,
 			"path", r.URL.Path,
 			"duration", time.Since(start),
+			"request_id", getRequestID(r.Context()),
 		)
 	})
 }
@@ -236,6 +247,16 @@ func authMiddleware(apiKey string, logger *slog.Logger) func(http.Handler) http.
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func requestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := newRequestID()
+		w.Header().Set("X-Request-ID", id)
+		ctx := context.WithValue(r.Context(), requestIDKey, id)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func NewServer(
@@ -275,6 +296,20 @@ func parseLevel(s string) slog.Level {
 	}
 
 	return slog.LevelInfo
+}
+
+func newRequestID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func getRequestID(ctx context.Context) string {
+	id, ok := ctx.Value(requestIDKey).(string)
+	if !ok {
+		return ""
+	}
+	return id
 }
 
 func main() {
@@ -339,7 +374,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    cfg.Port,
-		Handler: s.logRequest(contentType(mux)),
+		Handler: requestID(s.logRequest(contentType(mux))),
 	}
 
 	go func() {
