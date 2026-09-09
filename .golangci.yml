@@ -12,9 +12,20 @@ linters:
     - ineffassign
     - bodyclose
     - sqlclosecheck
+    - godox
   settings:
     govet:
       enable-all: true
+    godox:
+      keywords:
+        - TODO
+        - FIXME
+        - BUG
+        - HACK
+issues:
+  exclude-rules:
+    - linters:
+        - godox
 
 formatters:
   enable:
