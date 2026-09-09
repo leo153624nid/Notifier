@@ -9,9 +9,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // need to init driver, but nothing to call
@@ -268,9 +270,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "sql.open: %s\n", err)
 		os.Exit(1)
 	}
-	defer func() {
-		_ = db.Close()
-	}()
 
 	err = db.Ping()
 	if err != nil {
@@ -310,9 +309,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "server: %s\n", err)
 		os.Exit(1)
 	}
-	defer s.OnShutdown()
-
-	s.logger.Info("starting server", "port", cfg.Port)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.healthHandler)
@@ -321,8 +317,41 @@ func main() {
 	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
 	mux.HandleFunc("POST /api/notifications", s.createNotification)
 
-	err = http.ListenAndServe(cfg.Port, s.logRequest(contentType(mux)))
-	if err != nil {
-		s.logger.Error("Error starting server", "error", err)
+	srv := &http.Server{
+		Addr:    cfg.Port,
+		Handler: s.logRequest(contentType(mux)),
 	}
+
+	go func() {
+		s.logger.Info("starting http server", "port", cfg.Port)
+
+		err = srv.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.logger.Error("Error starting http server", "error", err)
+		}
+	}()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+	received := <-sig // freeze here and waiting signal
+	logger.Info("shutdown signal received", "signal", received.String())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	logger.Info("shutting down http server")
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("http server shutdown failed", "error", err)
+	}
+
+	logger.Info("waiting for background tasks")
+	s.OnShutdown()
+
+	logger.Info("closing database")
+	if err := db.Close(); err != nil {
+		logger.Error("db closing failed", "error", err)
+	}
+
+	logger.Info("shutdown completed")
 }
