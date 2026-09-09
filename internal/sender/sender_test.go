@@ -2,6 +2,7 @@ package sender
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"notifier/internal/notification"
@@ -19,7 +20,7 @@ func TestConsoleSender(t *testing.T) {
 		IsUrgent:  false,
 	}
 
-	err := sender.Send(n)
+	err := sender.Send(context.Background(), n)
 	if err != nil {
 		t.Fatalf("Send() error: %s", err)
 	}

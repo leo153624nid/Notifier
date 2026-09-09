@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -152,7 +153,10 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 		go func(n notification.Notification) {
 			defer s.wg.Done()
 
-			err = sender.Send(n)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			err = sender.Send(ctx, n)
 			if err != nil {
 				s.logger.Error("send failed", "id", id, "error", err)
 				_ = s.store.UpdateStatus(id, "failed")
