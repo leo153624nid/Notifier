@@ -36,12 +36,15 @@ type TelegramSender struct{}
 
 func (ls LoggingSender) Send(n notification.Notification) error {
 	ls.Logger.Info("sending", "to", n.Recipient, "channel", n.Channel)
+
 	err := ls.Sender.Send(n)
 	if err != nil {
 		ls.Logger.Error("Failed to send notification", "error", err)
 		return err
 	}
+
 	ls.Logger.Info("sent", "to", n.Recipient, "channel", n.Channel)
+
 	return nil
 }
 
