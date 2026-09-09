@@ -34,6 +34,7 @@ const (
 
 type Server struct {
 	store   store.Store
+	db      *sql.DB
 	logger  *slog.Logger
 	senders map[string]sender.Sender
 	wg      sync.WaitGroup
@@ -48,6 +49,19 @@ func (s *Server) OnShutdown() {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
+	const op = "Server.health"
+
+	ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
+	defer cancel()
+
+	err := s.db.PingContext(ctx)
+	if err != nil {
+		s.logger.Error("%s: db ping: %w", op, err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "db unavailable", "error": err.Error()})
+		return
+	}
+
 	data := struct {
 		App     string `json:"app"`
 		Version string `json:"version"`
@@ -60,7 +74,7 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(data)
 	if err != nil {
-		s.logger.Error("Marshal error", "error", err)
+		s.logger.Error("%s: marshal: %w", op, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -261,6 +275,7 @@ func requestID(next http.Handler) http.Handler {
 
 func NewServer(
 	store store.Store,
+	db *sql.DB,
 	logger *slog.Logger,
 	senders map[string]sender.Sender,
 ) (*Server, error) {
@@ -269,6 +284,7 @@ func NewServer(
 	if store == nil {
 		return nil, fmt.Errorf("%s: store is required", op)
 	}
+	// Check db == nil not needed
 	if logger == nil {
 		return nil, fmt.Errorf("%s: logger is required", op)
 	}
@@ -278,6 +294,7 @@ func NewServer(
 
 	return &Server{
 		store:   store,
+		db:      db,
 		logger:  logger,
 		senders: senders,
 	}, nil
@@ -357,7 +374,7 @@ func main() {
 		"telegram": sender.LoggingSender{Sender: sender.TelegramSender{}, Logger: logger},
 	}
 
-	s, err := NewServer(store, logger, senders)
+	s, err := NewServer(store, db, logger, senders)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "server: %s\n", err)
 		os.Exit(1)

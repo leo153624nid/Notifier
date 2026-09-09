@@ -1,28 +1,38 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"notifier/internal/config"
 	"notifier/internal/notification"
 	"notifier/internal/sender"
 	"notifier/internal/store"
 )
 
 func TestHealthHandler(t *testing.T) {
+	_ = os.Setenv("API_KEY", "secret")
+	cfg := config.Load()
+	db, err := sql.Open("pgx", cfg.DSN)
+	if err != nil {
+		t.Fatalf("DB error: %s", err)
+	}
+
 	store := store.NewMemoryStore()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	senders := map[string]sender.Sender{
 		"console": &sender.MockSender{},
 	}
 
-	s, err := NewServer(store, logger, senders)
+	s, err := NewServer(store, db, logger, senders)
 	if err != nil {
 		t.Fatalf("NewServer() error: %s", err)
 	}
@@ -82,7 +92,7 @@ func TestCreateNotification(t *testing.T) {
 				"email": mock,
 			}
 
-			s, err := NewServer(store, logger, senders)
+			s, err := NewServer(store, nil, logger, senders)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -139,7 +149,7 @@ func TestGetNotification(t *testing.T) {
 				"email": mock,
 			}
 
-			s, err := NewServer(store, logger, senders)
+			s, err := NewServer(store, nil, logger, senders)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -206,7 +216,7 @@ func TestListNotifications(t *testing.T) {
 				"email": mock,
 			}
 
-			s, err := NewServer(store, logger, senders)
+			s, err := NewServer(store, nil, logger, senders)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -248,7 +258,7 @@ func TestErrNotFoundThroughChain(t *testing.T) {
 		"email": mock,
 	}
 
-	s, err := NewServer(store, logger, senders)
+	s, err := NewServer(store, nil, logger, senders)
 	if err != nil {
 		t.Fatalf("NewSever() error: %s", err)
 	}
