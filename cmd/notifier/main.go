@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -220,6 +221,23 @@ func contentType(next http.Handler) http.Handler {
 	})
 }
 
+func authMiddleware(apiKey string, logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			key := r.Header.Get("X-API-KEY")
+
+			if subtle.ConstantTimeCompare([]byte(key), []byte(apiKey)) != 1 {
+				logger.Warn("auth failed", "path", r.URL.Path, "method", r.Method, "remote", r.RemoteAddr)
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid or missing api key"})
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func NewServer(
 	store store.Store,
 	logger *slog.Logger,
@@ -310,12 +328,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	auth := authMiddleware(cfg.APIkey, logger)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.healthHandler)
 	mux.HandleFunc("GET /api/notifications", s.listNotifications)
 	mux.HandleFunc("GET /api/notifications/export", s.exportNotification)
 	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
-	mux.HandleFunc("POST /api/notifications", s.createNotification)
+	mux.Handle("POST /api/notifications", auth(http.HandlerFunc(s.createNotification)))
 
 	srv := &http.Server{
 		Addr:    cfg.Port,
