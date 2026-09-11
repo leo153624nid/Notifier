@@ -18,6 +18,66 @@ import (
 	"notifier/internal/store"
 )
 
+func TestNewServer(t *testing.T) {
+	store := store.NewMemoryStore()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	senders := map[string]sender.Sender{
+		"console": &sender.MockSender{},
+	}
+	auditLogger := NewAuditLogger(t.TempDir() + "/audit.log")
+
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{
+			name:    "valid",
+			wantErr: false,
+		},
+		{
+			name:    "no store",
+			wantErr: true,
+		},
+		{
+			name:    "no logger",
+			wantErr: true,
+		},
+		{
+			name:    "no senders",
+			wantErr: true,
+		},
+		{
+			name:    "no auditLogger",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			switch tt.name {
+			case "no store":
+				_, err = NewServer(nil, nil, logger, senders, auditLogger)
+			case "no logger":
+				_, err = NewServer(store, nil, nil, senders, auditLogger)
+			case "no senders":
+				_, err = NewServer(store, nil, logger, nil, auditLogger)
+			case "no auditLogger":
+				_, err = NewServer(store, nil, logger, senders, nil)
+			default:
+				_, err = NewServer(store, nil, logger, senders, auditLogger)
+			}
+
+			if err != nil && !tt.wantErr {
+				t.Errorf("NewSever() error: %s", err)
+			}
+			if err == nil && tt.wantErr {
+				t.Errorf("err is nil, want error")
+			}
+		})
+	}
+}
+
 func TestHealthHandler(t *testing.T) {
 	_ = os.Setenv("API_KEY", "secret")
 	cfg, err := config.Load()
