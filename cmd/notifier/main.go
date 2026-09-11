@@ -14,6 +14,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // need to init driver, but nothing to call
+	"golang.org/x/time/rate"
 
 	"notifier/internal/config"
 	"notifier/internal/sender"
@@ -134,12 +135,15 @@ func main() {
 
 	auth := authMiddleware(cfg.APIkey, logger)
 
+	ipLimiter := newIPRateLimiter(rate.Limit(10), 20)
+	rateLimit := rateLimiterMiddleware(ipLimiter)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.healthHandler)
-	mux.Handle("GET /api/v1/notifications", auth(http.HandlerFunc(s.listNotifications)))
-	mux.Handle("GET /api/v1/notifications/export", auth(http.HandlerFunc(s.exportNotification)))
-	mux.Handle("GET /api/v1/notifications/{id}", auth(http.HandlerFunc(s.getNotification)))
-	mux.Handle("POST /api/v1/notifications", auth(http.HandlerFunc(s.createNotification)))
+	mux.Handle("GET /api/v1/notifications", rateLimit(auth(http.HandlerFunc(s.listNotifications))))
+	mux.Handle("GET /api/v1/notifications/export", rateLimit(auth(http.HandlerFunc(s.exportNotification))))
+	mux.Handle("GET /api/v1/notifications/{id}", rateLimit(auth(http.HandlerFunc(s.getNotification))))
+	mux.Handle("POST /api/v1/notifications", rateLimit(auth(http.HandlerFunc(s.createNotification))))
 
 	srv := &http.Server{
 		Addr:              cfg.Port,
@@ -175,6 +179,8 @@ func main() {
 
 	logger.Info("waiting for background tasks")
 	s.OnShutdown()
+
+	ipLimiter.Stop()
 
 	logger.Info("closing database")
 	if err := db.Close(); err != nil {
