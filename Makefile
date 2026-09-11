@@ -8,7 +8,7 @@ PORT ?= 8080
 API_KEY ?= secret
 LOG_LEVEL ?= info
 
-.PHONY: build run test test-race clean help
+.PHONY: build run test test-race lint clean help
 
 build: ## собрать бинарник в bin/
 	go build -o $(BINARY) $(MAIN_PKG)
@@ -21,6 +21,9 @@ test: ## запустить тесты
 
 test-race: ## запустить тесты с race
 	go test -race ./...
+
+lint: ## прогнать golangci-lint
+	golangci-lint run ./...
 
 clean: ## удалить bin/ 
 	rm -rf bin/

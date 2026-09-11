@@ -4,6 +4,7 @@ run:
   timeout: 3m
 
 linters:
+  default: none
   enable:
     - govet
     - staticcheck
@@ -13,6 +14,7 @@ linters:
     - bodyclose
     - sqlclosecheck
     - godox
+    - misspell
   settings:
     govet:
       enable-all: true
