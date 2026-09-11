@@ -1,0 +1,6 @@
+.git
+bin/
+audit.log
+*.log
+.vscode
+.DS_Store
