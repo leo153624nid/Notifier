@@ -8,7 +8,7 @@ PORT ?= 8080
 API_KEY ?= secret
 LOG_LEVEL ?= info
 
-.PHONY: build run test test-race lint clean docker-build docker-up docker-down docker-logs help
+.PHONY: build run test test-race lint clean docker-build docker-up docker-start docker-stop docker-down docker-logs help
 
 build: ## собрать бинарник в bin/
 	go build -o $(BINARY) $(MAIN_PKG)
@@ -31,8 +31,14 @@ clean: ## удалить bin/
 docker-build: ## собрать docker-образ сервиса
 	docker compose build
 
-docker-up: ## поднять сервис вместе с базой
+docker-up: ## пересобрать и поднять сервис вместе с базой
 	docker compose up -d --build
+
+docker-start: ## запустить ранее остановленные контейнеры без пересборки
+	docker compose start
+
+docker-stop: ## остановить контейнеры без удаления
+	docker compose stop
 
 docker-down: ## остановить и удалить контейнеры
 	docker compose down
