@@ -167,6 +167,7 @@ func TestCreateNotification(t *testing.T) {
 
 			s.createNotification(w, r)
 			time.Sleep(300 * time.Millisecond)
+			s.OnShutdown()
 
 			if w.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)

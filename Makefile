@@ -1,25 +1,29 @@
+.DEFAULT_GOAL := help
 
 BINARY_NAME := notifier
 MAIN_PKG := ./cmd/notifier
 BINARY := bin/$(BINARY_NAME)
 
 PORT ?= 8080
-API_KEY ?= secret123
+API_KEY ?= secret
 LOG_LEVEL ?= info
 
-.PHONY: build run test test-race clean
+.PHONY: build run test test-race clean help
 
-build:
+build: ## собрать бинарник в bin/
 	go build -o $(BINARY) $(MAIN_PKG)
 
-run: build
+run: build ## собрать и запустить сервис
 	PORT=$(PORT) API_KEY=$(API_KEY) LOG_LEVEL=$(LOG_LEVEL) $(BINARY)
 
-test:
+test: ## запустить тесты
 	go test ./...
 
-test-race:
+test-race: ## запустить тесты с race
 	go test -race ./...
 
-clean:
+clean: ## удалить bin/ 
 	rm -rf bin/
+
+help: ## подсказать
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
