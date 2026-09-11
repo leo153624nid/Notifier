@@ -46,6 +46,17 @@ type Server struct {
 	wg          sync.WaitGroup
 }
 
+type APIError struct {
+	Error string `json:"error"`
+}
+
+func SendJSONError(w http.ResponseWriter, message string, status int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	_ = json.NewEncoder(w).Encode(APIError{Error: message})
+}
+
 type ctxKey struct{}
 
 var requestIDKey = ctxKey{}
@@ -95,28 +106,26 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		bytes := fmt.Sprintf(`{"error": "%s"}`, notification.ErrInvalidId.Error())
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(bytes))
+		SendJSONError(w, notification.ErrInvalidId.Error(), http.StatusBadRequest)
 		return
 	}
 
 	n, err := s.store.GetById(id)
 	if err != nil {
 		if errors.Is(err, notification.ErrNotFound) {
-			http.Error(w, "error: not found", http.StatusNotFound)
+			SendJSONError(w, notification.ErrNotFound.Error(), http.StatusNotFound)
 			return
 		}
 
 		s.logger.Error("get from store failed", "op", op, "error", err)
-		http.Error(w, "error: internal error", http.StatusInternalServerError)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
 	js, err := json.Marshal(n)
 	if err != nil {
 		s.logger.Error("marshal failed", "op", op, "error", err)
-		http.Error(w, "error: internal error", http.StatusInternalServerError)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
@@ -130,7 +139,7 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	notifications, err := s.store.GetAll()
 	if err != nil {
 		s.logger.Error("store getAll failed", "op", op, "error", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
@@ -141,7 +150,7 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	js, err := json.Marshal(notifications)
 	if err != nil {
 		s.logger.Error("marshal failed", "op", op, "error", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
@@ -158,27 +167,26 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	var n notification.Notification
 	err := json.NewDecoder(r.Body).Decode(&n)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error": "Invalid request payload"}`))
+		SendJSONError(w, "invalid request payload", http.StatusBadRequest)
 		return
 	}
 
 	err = n.Validate()
 	if err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		SendJSONError(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
 	sender, ok := s.senders[n.Channel]
 	if !ok {
-		http.Error(w, "invalid request: unsupported channel", http.StatusBadRequest)
+		SendJSONError(w, "invalid request: unsupported channel", http.StatusBadRequest)
 		return
 	}
 
 	id, err := s.store.Save(n)
 	if err != nil {
 		s.logger.Error("save failed", "error", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
@@ -204,7 +212,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	js, err := json.Marshal(n)
 	if err != nil {
 		s.logger.Error("marshal failed", "op", op, "error", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
@@ -218,14 +226,14 @@ func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
 	notifications, err := s.store.GetAll()
 	if err != nil {
 		s.logger.Error("get all notifications failed", "op", op, "error", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
 	err = s.auditLogger.Write(notifications)
 	if err != nil {
 		s.logger.Error("export failed", "op", op, "error", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
