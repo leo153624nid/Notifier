@@ -2,19 +2,13 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
 	"database/sql"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -22,13 +16,12 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // need to init driver, but nothing to call
 
 	"notifier/internal/config"
-	"notifier/internal/notification"
 	"notifier/internal/sender"
 	"notifier/internal/store"
 )
 
 const (
-	appVersion = "0.1.0"
+	appVersion = "0.2.0"
 	appName    = "Notifier"
 
 	serverReadHeaderTimeout = 5 * time.Second
@@ -44,249 +37,6 @@ type Server struct {
 	senders     map[string]sender.Sender
 	auditLogger *AuditLogger
 	wg          sync.WaitGroup
-}
-
-type APIError struct {
-	Error string `json:"error"`
-}
-
-func SendJSONError(w http.ResponseWriter, message string, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-
-	_ = json.NewEncoder(w).Encode(APIError{Error: message})
-}
-
-type ctxKey struct{}
-
-var requestIDKey = ctxKey{}
-
-func (s *Server) OnShutdown() {
-	s.wg.Wait()
-}
-
-func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	const op = "Server.health"
-
-	ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
-	defer cancel()
-
-	err := s.db.PingContext(ctx)
-	if err != nil {
-		s.logger.Error("db ping failed", "op", op, "error", err)
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "db unavailable", "error": err.Error()})
-		return
-	}
-
-	data := struct {
-		App     string `json:"app"`
-		Version string `json:"version"`
-		Status  string `json:"status"`
-	}{
-		App:     appName,
-		Version: appVersion,
-		Status:  "available",
-	}
-
-	js, err := json.Marshal(data)
-	if err != nil {
-		s.logger.Error("marshal failed", "op", op, "error", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(js)
-}
-
-func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
-	const op = "Server.getNotification"
-
-	idStr := r.PathValue("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		SendJSONError(w, notification.ErrInvalidId.Error(), http.StatusBadRequest)
-		return
-	}
-
-	n, err := s.store.GetById(id)
-	if err != nil {
-		if errors.Is(err, notification.ErrNotFound) {
-			SendJSONError(w, notification.ErrNotFound.Error(), http.StatusNotFound)
-			return
-		}
-
-		s.logger.Error("get from store failed", "op", op, "error", err)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	js, err := json.Marshal(n)
-	if err != nil {
-		s.logger.Error("marshal failed", "op", op, "error", err)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(js)
-}
-
-func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
-	const op = "Server.listNotifications"
-
-	notifications, err := s.store.GetAll()
-	if err != nil {
-		s.logger.Error("store getAll failed", "op", op, "error", err)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	if notifications == nil {
-		notifications = []notification.Notification{}
-	}
-
-	js, err := json.Marshal(notifications)
-	if err != nil {
-		s.logger.Error("marshal failed", "op", op, "error", err)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(js)
-}
-
-func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
-	const op = "Server.createNotification"
-
-	reqID := getRequestID(r.Context())
-	reqLogger := s.logger.With("request_id", reqID)
-
-	var n notification.Notification
-	err := json.NewDecoder(r.Body).Decode(&n)
-	if err != nil {
-		SendJSONError(w, "invalid request payload", http.StatusBadRequest)
-		return
-	}
-
-	err = n.Validate()
-	if err != nil {
-		SendJSONError(w, "invalid request", http.StatusBadRequest)
-		return
-	}
-
-	sender, ok := s.senders[n.Channel]
-	if !ok {
-		SendJSONError(w, "invalid request: unsupported channel", http.StatusBadRequest)
-		return
-	}
-
-	id, err := s.store.Save(n)
-	if err != nil {
-		s.logger.Error("save failed", "error", err)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	n.ID = id
-	n.Status = "pending"
-
-	s.wg.Add(1)
-	go func(n notification.Notification) {
-		defer s.wg.Done()
-
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-
-		if senderErr := sender.Send(ctx, n); senderErr != nil {
-			reqLogger.Error("send failed", "id", id, "error", senderErr)
-			_ = s.store.UpdateStatus(id, "failed")
-		} else {
-			reqLogger.Info("notification sent", "id", id, "channel", n.Channel)
-			_ = s.store.UpdateStatus(id, "sent")
-		}
-	}(n)
-
-	js, err := json.Marshal(n)
-	if err != nil {
-		s.logger.Error("marshal failed", "op", op, "error", err)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusAccepted)
-	_, _ = w.Write(js)
-}
-
-func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
-	const op = "Server.exportNotification"
-
-	notifications, err := s.store.GetAll()
-	if err != nil {
-		s.logger.Error("get all notifications failed", "op", op, "error", err)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	err = s.auditLogger.Write(notifications)
-	if err != nil {
-		s.logger.Error("export failed", "op", op, "error", err)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]int{"exported": len(notifications)})
-}
-
-func (s *Server) logRequest(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		s.logger.Info(
-			"request completed",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"duration", time.Since(start),
-			"request_id", getRequestID(r.Context()),
-		)
-	})
-}
-
-func contentType(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		next.ServeHTTP(w, r)
-	})
-}
-
-func authMiddleware(apiKey string, logger *slog.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := r.Header.Get("X-API-KEY")
-
-			if subtle.ConstantTimeCompare([]byte(key), []byte(apiKey)) != 1 {
-				logger.Warn("auth failed", "path", r.URL.Path, "method", r.Method, "remote", r.RemoteAddr)
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid or missing api key"})
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-func requestID(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := newRequestID()
-		w.Header().Set("X-Request-ID", id)
-		ctx := context.WithValue(r.Context(), requestIDKey, id)
-
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
 }
 
 func NewServer(
@@ -321,33 +71,8 @@ func NewServer(
 	}, nil
 }
 
-func parseLevel(s string) slog.Level {
-	levels := map[string]slog.Level{
-		"debug": slog.LevelDebug,
-		"info":  slog.LevelInfo,
-		"warn":  slog.LevelWarn,
-		"error": slog.LevelError,
-	}
-
-	if lvl, ok := levels[strings.ToLower(s)]; ok {
-		return lvl
-	}
-
-	return slog.LevelInfo
-}
-
-func newRequestID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
-func getRequestID(ctx context.Context) string {
-	id, ok := ctx.Value(requestIDKey).(string)
-	if !ok {
-		return ""
-	}
-	return id
+func (s *Server) OnShutdown() {
+	s.wg.Wait()
 }
 
 func main() {
@@ -411,10 +136,10 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.healthHandler)
-	mux.Handle("GET /api/notifications", auth(http.HandlerFunc(s.listNotifications)))
-	mux.Handle("GET /api/notifications/export", auth(http.HandlerFunc(s.exportNotification)))
-	mux.Handle("GET /api/notifications/{id}", auth(http.HandlerFunc(s.getNotification)))
-	mux.Handle("POST /api/notifications", auth(http.HandlerFunc(s.createNotification)))
+	mux.Handle("GET /api/v1/notifications", auth(http.HandlerFunc(s.listNotifications)))
+	mux.Handle("GET /api/v1/notifications/export", auth(http.HandlerFunc(s.exportNotification)))
+	mux.Handle("GET /api/v1/notifications/{id}", auth(http.HandlerFunc(s.getNotification)))
+	mux.Handle("POST /api/v1/notifications", auth(http.HandlerFunc(s.createNotification)))
 
 	srv := &http.Server{
 		Addr:              cfg.Port,
