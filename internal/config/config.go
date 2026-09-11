@@ -6,17 +6,19 @@ import (
 )
 
 type Config struct {
-	Port     string
-	DSN      string
-	LogLevel string
-	APIkey   string
+	Port         string
+	DSN          string
+	LogLevel     string
+	APIkey       string
+	AuditLogPath string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		Port:     ":8080",
-		DSN:      LoadPostgresConfig().DSN(),
-		LogLevel: "info",
+		Port:         ":8080",
+		DSN:          LoadPostgresConfig().DSN(),
+		LogLevel:     "info",
+		AuditLogPath: "audit.log",
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
@@ -24,6 +26,9 @@ func Load() (Config, error) {
 	}
 	if v := os.Getenv("LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
+	}
+	if v := os.Getenv("AUDIT_LOG_PATH"); v != "" {
+		cfg.AuditLogPath = v
 	}
 
 	apiKey, ok := os.LookupEnv("API_KEY")

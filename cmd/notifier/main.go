@@ -33,11 +33,12 @@ const (
 )
 
 type Server struct {
-	store   store.Store
-	db      *sql.DB
-	logger  *slog.Logger
-	senders map[string]sender.Sender
-	wg      sync.WaitGroup
+	store       store.Store
+	db          *sql.DB
+	logger      *slog.Logger
+	senders     map[string]sender.Sender
+	auditLogger *AuditLogger
+	wg          sync.WaitGroup
 }
 
 type ctxKey struct{}
@@ -208,12 +209,12 @@ func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
 
 	notifications, err := s.store.GetAll()
 	if err != nil {
-		s.logger.Error("list notifications failed", "op", op, "error", err)
+		s.logger.Error("get all notifications failed", "op", op, "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
-	err = WriteAuditLog("audit.log", notifications)
+	err = s.auditLogger.Write(notifications)
 	if err != nil {
 		s.logger.Error("export failed", "op", op, "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -277,6 +278,7 @@ func NewServer(
 	db *sql.DB,
 	logger *slog.Logger,
 	senders map[string]sender.Sender,
+	auditLogger *AuditLogger,
 ) (*Server, error) {
 	const op = "NewServer"
 
@@ -290,12 +292,16 @@ func NewServer(
 	if len(senders) == 0 {
 		return nil, fmt.Errorf("%s: senders is required", op)
 	}
+	if auditLogger == nil {
+		return nil, fmt.Errorf("%s: auditLogger is required", op)
+	}
 
 	return &Server{
-		store:   store,
-		db:      db,
-		logger:  logger,
-		senders: senders,
+		store:       store,
+		db:          db,
+		logger:      logger,
+		senders:     senders,
+		auditLogger: auditLogger,
 	}, nil
 }
 
@@ -377,7 +383,9 @@ func main() {
 		"telegram": sender.LoggingSender{Sender: sender.TelegramSender{}, Logger: logger},
 	}
 
-	s, err := NewServer(store, db, logger, senders)
+	auditLogger := NewAuditLogger(cfg.AuditLogPath)
+
+	s, err := NewServer(store, db, logger, senders, auditLogger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "server: %s\n", err)
 		os.Exit(1)

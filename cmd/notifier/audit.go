@@ -2,14 +2,28 @@ package main
 
 import (
 	"fmt"
-	"notifier/internal/notification"
 	"os"
+	"sync"
+
+	"notifier/internal/notification"
 )
 
-func WriteAuditLog(path string, notifications []notification.Notification) error {
-	const op = "WriteAuditLog"
+type AuditLogger struct {
+	path string
+	mu   sync.Mutex
+}
 
-	f, err := os.Create(path)
+func NewAuditLogger(path string) *AuditLogger {
+	return &AuditLogger{path: path}
+}
+
+func (a *AuditLogger) Write(notifications []notification.Notification) error {
+	const op = "AuditLogger.Write"
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	f, err := os.Create(a.path)
 	if err != nil {
 		return fmt.Errorf("%s: create: %w", op, err)
 	}

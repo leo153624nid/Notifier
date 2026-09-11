@@ -34,8 +34,9 @@ func TestHealthHandler(t *testing.T) {
 	senders := map[string]sender.Sender{
 		"console": &sender.MockSender{},
 	}
+	auditLogger := NewAuditLogger(t.TempDir() + "/audit.log")
 
-	s, err := NewServer(store, db, logger, senders)
+	s, err := NewServer(store, db, logger, senders, auditLogger)
 	if err != nil {
 		t.Fatalf("NewServer() error: %s", err)
 	}
@@ -94,8 +95,9 @@ func TestCreateNotification(t *testing.T) {
 			senders := map[string]sender.Sender{
 				"email": mock,
 			}
+			auditLogger := NewAuditLogger(t.TempDir() + "/audit.log")
 
-			s, err := NewServer(store, nil, logger, senders)
+			s, err := NewServer(store, nil, logger, senders, auditLogger)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -151,8 +153,9 @@ func TestGetNotification(t *testing.T) {
 			senders := map[string]sender.Sender{
 				"email": mock,
 			}
+			auditLogger := NewAuditLogger(t.TempDir() + "/audit.log")
 
-			s, err := NewServer(store, nil, logger, senders)
+			s, err := NewServer(store, nil, logger, senders, auditLogger)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -218,8 +221,9 @@ func TestListNotifications(t *testing.T) {
 			senders := map[string]sender.Sender{
 				"email": mock,
 			}
+			auditLogger := NewAuditLogger(t.TempDir() + "/audit.log")
 
-			s, err := NewServer(store, nil, logger, senders)
+			s, err := NewServer(store, nil, logger, senders, auditLogger)
 			if err != nil {
 				t.Fatalf("NewSever() error: %s", err)
 			}
@@ -260,8 +264,9 @@ func TestErrNotFoundThroughChain(t *testing.T) {
 	senders := map[string]sender.Sender{
 		"email": mock,
 	}
+	auditLogger := NewAuditLogger(t.TempDir() + "/audit.log")
 
-	s, err := NewServer(store, nil, logger, senders)
+	s, err := NewServer(store, nil, logger, senders, auditLogger)
 	if err != nil {
 		t.Fatalf("NewSever() error: %s", err)
 	}
