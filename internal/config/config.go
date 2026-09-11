@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"fmt"
 	"os"
 )
 
@@ -12,7 +12,7 @@ type Config struct {
 	APIkey   string
 }
 
-func Load() Config {
+func Load() (Config, error) {
 	cfg := Config{
 		Port:     ":8080",
 		DSN:      LoadPostgresConfig().DSN(),
@@ -28,9 +28,9 @@ func Load() Config {
 
 	apiKey, ok := os.LookupEnv("API_KEY")
 	if !ok || apiKey == "" {
-		log.Fatal("API_KEY is required")
+		return Config{}, fmt.Errorf("config: API_KEY is required")
 	}
 	cfg.APIkey = apiKey
 
-	return cfg
+	return cfg, nil
 }

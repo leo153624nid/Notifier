@@ -56,7 +56,7 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	err := s.db.PingContext(ctx)
 	if err != nil {
-		s.logger.Error("%s: db ping: %w", op, err)
+		s.logger.Error("db ping failed", "op", op, "error", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "db unavailable", "error": err.Error()})
 		return
@@ -74,7 +74,7 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(data)
 	if err != nil {
-		s.logger.Error("%s: marshal: %w", op, err)
+		s.logger.Error("marshal failed", "op", op, "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -102,14 +102,14 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		s.logger.Error("%s: %w", op, err)
+		s.logger.Error("get from store failed", "op", op, "error", err)
 		http.Error(w, "error: internal error", http.StatusInternalServerError)
 		return
 	}
 
 	js, err := json.Marshal(n)
 	if err != nil {
-		s.logger.Error("%s: %w", op, err)
+		s.logger.Error("marshal failed", "op", op, "error", err)
 		http.Error(w, "error: internal error", http.StatusInternalServerError)
 		return
 	}
@@ -123,7 +123,7 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 
 	notifications, err := s.store.GetAll()
 	if err != nil {
-		s.logger.Error("%s: getAll: %w", op, err)
+		s.logger.Error("store getAll failed", "op", op, "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -134,7 +134,7 @@ func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(notifications)
 	if err != nil {
-		s.logger.Error("%s: marshal: %w", op, err)
+		s.logger.Error("marshal failed", "op", op, "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -182,9 +182,8 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
-			err = sender.Send(ctx, n)
-			if err != nil {
-				reqLogger.Error("send failed", "id", id, "error", err)
+			if senderErr := sender.Send(ctx, n); senderErr != nil {
+				reqLogger.Error("send failed", "id", id, "error", senderErr)
 				_ = s.store.UpdateStatus(id, "failed")
 			} else {
 				reqLogger.Info("notification sent", "id", id, "channel", n.Channel)
@@ -195,7 +194,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 
 	js, err := json.Marshal(n)
 	if err != nil {
-		s.logger.Error("%s: %w", op, err)
+		s.logger.Error("marshal failed", "op", op, "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -330,7 +329,11 @@ func getRequestID(ctx context.Context) string {
 }
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: %s\n", err)
+		os.Exit(1)
+	}
 
 	opts := &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, opts)).With("service", appName, "version", appVersion)
@@ -384,9 +387,9 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.healthHandler)
-	mux.HandleFunc("GET /api/notifications", s.listNotifications)
-	mux.HandleFunc("GET /api/notifications/export", s.exportNotification)
-	mux.HandleFunc("GET /api/notifications/{id}", s.getNotification)
+	mux.Handle("GET /api/notifications", auth(http.HandlerFunc(s.listNotifications)))
+	mux.Handle("GET /api/notifications/export", auth(http.HandlerFunc(s.exportNotification)))
+	mux.Handle("GET /api/notifications/{id}", auth(http.HandlerFunc(s.getNotification)))
 	mux.Handle("POST /api/notifications", auth(http.HandlerFunc(s.createNotification)))
 
 	srv := &http.Server{

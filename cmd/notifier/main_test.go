@@ -20,7 +20,10 @@ import (
 
 func TestHealthHandler(t *testing.T) {
 	_ = os.Setenv("API_KEY", "secret")
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load() error: %s", err)
+	}
 	db, err := sql.Open("pgx", cfg.DSN)
 	if err != nil {
 		t.Fatalf("DB error: %s", err)

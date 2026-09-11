@@ -51,7 +51,7 @@ func (s *PostgresStore) GetAll() ([]notification.Notification, error) {
 
 	defer func() {
 		if closeErr := rows.Close(); closeErr != nil {
-			s.logger.Error("%s: close: %w", op, closeErr)
+			s.logger.Error("rows close failed", "op", op, "error", closeErr)
 		}
 	}()
 

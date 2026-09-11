@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 )
 
@@ -15,10 +16,18 @@ type PostgresConfig struct {
 }
 
 func (c PostgresConfig) DSN() string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		c.User, c.Password, c.Host, c.Port, c.DBName, c.SSLMode,
-	)
+	u := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(c.User, c.Password),
+		Host:   fmt.Sprintf("%s:%s", c.Host, c.Port),
+		Path:   "/" + c.DBName,
+	}
+
+	q := u.Query()
+	q.Set("sslmode", c.SSLMode)
+	u.RawQuery = q.Encode()
+
+	return u.String()
 }
 
 func LoadPostgresConfig() PostgresConfig {
