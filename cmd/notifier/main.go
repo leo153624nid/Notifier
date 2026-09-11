@@ -169,6 +169,12 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sender, ok := s.senders[n.Channel]
+	if !ok {
+		http.Error(w, "invalid request: unsupported channel", http.StatusBadRequest)
+		return
+	}
+
 	id, err := s.store.Save(n)
 	if err != nil {
 		s.logger.Error("save failed", "error", err)
@@ -179,24 +185,21 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	n.ID = id
 	n.Status = "pending"
 
-	sender, ok := s.senders[n.Channel]
-	if ok {
-		s.wg.Add(1)
-		go func(n notification.Notification) {
-			defer s.wg.Done()
+	s.wg.Add(1)
+	go func(n notification.Notification) {
+		defer s.wg.Done()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
 
-			if senderErr := sender.Send(ctx, n); senderErr != nil {
-				reqLogger.Error("send failed", "id", id, "error", senderErr)
-				_ = s.store.UpdateStatus(id, "failed")
-			} else {
-				reqLogger.Info("notification sent", "id", id, "channel", n.Channel)
-				_ = s.store.UpdateStatus(id, "sent")
-			}
-		}(n)
-	}
+		if senderErr := sender.Send(ctx, n); senderErr != nil {
+			reqLogger.Error("send failed", "id", id, "error", senderErr)
+			_ = s.store.UpdateStatus(id, "failed")
+		} else {
+			reqLogger.Info("notification sent", "id", id, "channel", n.Channel)
+			_ = s.store.UpdateStatus(id, "sent")
+		}
+	}(n)
 
 	js, err := json.Marshal(n)
 	if err != nil {

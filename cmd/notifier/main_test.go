@@ -82,7 +82,7 @@ func TestCreateNotification(t *testing.T) {
 		{
 			name:       "unknown channel",
 			body:       `{"to":"user@example.com","subject":"some","channel":"sms"}`,
-			wantStatus: 202,
+			wantStatus: 400,
 			wantCalls:  0,
 		},
 	}
