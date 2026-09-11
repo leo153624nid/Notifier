@@ -30,6 +30,11 @@ import (
 const (
 	appVersion = "0.1.0"
 	appName    = "Notifier"
+
+	serverReadHeaderTimeout = 5 * time.Second
+	serverReadTimeout       = 10 * time.Second
+	serverWriteTimeout      = 15 * time.Second
+	serverIdleTimeout       = 60 * time.Second
 )
 
 type Server struct {
@@ -401,8 +406,12 @@ func main() {
 	mux.Handle("POST /api/notifications", auth(http.HandlerFunc(s.createNotification)))
 
 	srv := &http.Server{
-		Addr:    cfg.Port,
-		Handler: requestID(s.logRequest(contentType(mux))),
+		Addr:              cfg.Port,
+		Handler:           requestID(s.logRequest(contentType(mux))),
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       serverIdleTimeout,
 	}
 
 	go func() {
