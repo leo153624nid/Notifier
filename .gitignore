@@ -53,3 +53,6 @@ go.work.sum
 
 # Log files
 *.log
+
+# Build output
+bin/
