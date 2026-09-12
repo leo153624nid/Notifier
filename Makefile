@@ -20,7 +20,7 @@ LOG_LEVEL ?= info
 
 export
 
-.PHONY: build run test test-race lint clean docker-build docker-up docker-start docker-stop docker-down docker-logs help
+.PHONY: build run test test-race lint clean docker-build docker-up docker-start docker-stop docker-down docker-logs release ci help
 
 build: ## собрать бинарник в bin/
 	go build -o $(BINARY) $(MAIN_PKG)
@@ -57,6 +57,17 @@ docker-down: ## остановить и удалить контейнеры
 
 docker-logs: ## смотреть логи сервиса
 	docker compose --env-file $(ENV_FILE) logs -f notifier
+
+release: ## Собрать релизные бинарники в dist/
+	@mkdir -p dist
+	@for OSARCH in linux/amd64 linux/arm64 darwin/arm64; do \
+		GOOS=$${OSARCH%/*}; GOARCH=$${OSARCH#*/}; \
+		echo "building notifier-$$GOOS-$$GOARCH"; \
+		CGO_ENABLED=0 GOOS=$$GOOS GOARCH=$$GOARCH \
+			go build -ldflags='-s -w' -o dist/notifier-$$GOOS-$$GOARCH ./cmd/notifier; \
+	done
+
+ci: lint test-race build ## Прогнать все проверки CI локально
 
 help: ## подсказать
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
