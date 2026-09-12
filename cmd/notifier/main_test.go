@@ -1,18 +1,17 @@
 package main
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"notifier/internal/config"
+	"github.com/DATA-DOG/go-sqlmock"
+
 	"notifier/internal/notification"
 	"notifier/internal/sender"
 	"notifier/internal/store"
@@ -79,15 +78,12 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestHealthHandler(t *testing.T) {
-	_ = os.Setenv("API_KEY", "secret")
-	cfg, err := config.Load()
+	db, mock, err := sqlmock.New()
 	if err != nil {
-		t.Fatalf("config.Load() error: %s", err)
+		t.Fatalf("sqlmock.New() error: %s", err)
 	}
-	db, err := sql.Open("pgx", cfg.DSN)
-	if err != nil {
-		t.Fatalf("DB error: %s", err)
-	}
+	defer func() { _ = db.Close() }()
+	mock.ExpectPing()
 
 	store := store.NewMemoryStore()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -111,6 +107,9 @@ func TestHealthHandler(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "available") {
 		t.Errorf("body = %q, want contains %q", w.Body.String(), "available")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet sqlmock expectations: %s", err)
 	}
 }
 
