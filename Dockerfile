@@ -13,5 +13,9 @@ FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /notifier /notifier
 
+# непривилегированный пользователь: в scratch нет /etc/passwd,
+# но числовой UID/GID ядру достаточен и без записи в passwd
+USER 65532:65532
+
 EXPOSE 8080
 ENTRYPOINT [ "/notifier" ]

@@ -48,8 +48,10 @@ Icon
 # Go workspace file
 go.work.sum
 
-# env file
+# env files (секреты в git не попадают, только *.example)
 .env
+.env.prod
+.env.*.local
 
 # Log files
 *.log

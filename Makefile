@@ -4,17 +4,29 @@ BINARY_NAME := notifier
 MAIN_PKG := ./cmd/notifier
 BINARY := bin/$(BINARY_NAME)
 
+# ---- единая точка конфигурации ----
+# ENV_FILE выбирает окружение: .env (дев, по умолчанию) или .env.prod (прод).
+# Пример: make docker-up ENV_FILE=.env.prod
+# Переменные из файла подхватываются здесь и экспортируются (см. `export`
+# ниже) во все команды — и в локальный `run`, и в `docker compose`.
+ENV_FILE ?= .env
+-include $(ENV_FILE)
+
+# запасные значения на случай, если $(ENV_FILE) отсутствует или не
+# задаёт переменную (например, на чистом чекауте без cp .env.example .env)
 PORT ?= 8080
 API_KEY ?= secret
 LOG_LEVEL ?= info
+
+export
 
 .PHONY: build run test test-race lint clean docker-build docker-up docker-start docker-stop docker-down docker-logs help
 
 build: ## собрать бинарник в bin/
 	go build -o $(BINARY) $(MAIN_PKG)
 
-run: build ## собрать и запустить сервис
-	PORT=$(PORT) API_KEY=$(API_KEY) LOG_LEVEL=$(LOG_LEVEL) $(BINARY)
+run: build ## собрать и запустить сервис локально (переменные из $(ENV_FILE))
+	$(BINARY)
 
 test: ## запустить тесты
 	go test ./...
@@ -29,22 +41,22 @@ clean: ## удалить bin/
 	rm -rf bin/
 
 docker-build: ## собрать docker-образ сервиса
-	docker compose build
+	docker compose --env-file $(ENV_FILE) build
 
 docker-up: ## пересобрать и поднять сервис вместе с базой
-	docker compose up -d --build
+	docker compose --env-file $(ENV_FILE) up -d --build
 
 docker-start: ## запустить ранее остановленные контейнеры без пересборки
-	docker compose start
+	docker compose --env-file $(ENV_FILE) start
 
 docker-stop: ## остановить контейнеры без удаления
-	docker compose stop
+	docker compose --env-file $(ENV_FILE) stop
 
 docker-down: ## остановить и удалить контейнеры
-	docker compose down
+	docker compose --env-file $(ENV_FILE) down
 
 docker-logs: ## смотреть логи сервиса
-	docker compose logs -f notifier
+	docker compose --env-file $(ENV_FILE) logs -f notifier
 
 help: ## подсказать
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'

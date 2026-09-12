@@ -4,15 +4,15 @@ services:
     container_name: postgres_notifier
     restart: unless-stopped
     environment:
-      POSTGRES_USER: notifier
-      POSTGRES_PASSWORD: notifier
-      POSTGRES_DB: notifier
+      POSTGRES_USER: ${PG_USER:-notifier}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-notifier}
+      POSTGRES_DB: ${PG_DBNAME:-notifier}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U notifier -d notifier"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-notifier} -d ${PG_DBNAME:-notifier}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -26,17 +26,21 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      PORT: 8080
+      PORT: ${PORT:-8080}
       API_KEY: ${API_KEY:-secret}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Внутри docker-сети адрес БД всегда postgres:5432 — это топология
+      # compose (имя сервиса + его порт внутри сети), а не настраиваемый
+      # параметр. PG_HOST/PG_PORT в .env нужны только для `make run`
+      # (запуск бинарника на хосте) и здесь не используются.
       PG_HOST: postgres
       PG_PORT: 5432
-      PG_USER: notifier
-      PG_PASSWORD: notifier
-      PG_DBNAME: notifier
-      PG_SSLMODE: disable
+      PG_USER: ${PG_USER:-notifier}
+      PG_PASSWORD: ${PG_PASSWORD:-notifier}
+      PG_DBNAME: ${PG_DBNAME:-notifier}
+      PG_SSLMODE: ${PG_SSLMODE:-disable}
     ports:
-      - "8080:8080"
+      - "${APP_HOST_PORT:-8080}:${PORT:-8080}"
 
 volumes:
   pgdata:
