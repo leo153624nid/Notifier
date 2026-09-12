@@ -24,7 +24,6 @@ linters:
         - FIXME
         - BUG
         - HACK
-issues:
   exclude-rules:
     - linters:
         - godox
