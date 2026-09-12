@@ -24,9 +24,11 @@ linters:
         - FIXME
         - BUG
         - HACK
-  exclude-rules:
-    - linters:
-        - godox
+  exclusions:
+    rules:
+      - linters:
+          - godox
+        path: ".*"
 
 formatters:
   enable:
