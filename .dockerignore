@@ -1,5 +1,6 @@
 .git
 bin/
+dist/
 audit.log
 *.log
 .vscode
