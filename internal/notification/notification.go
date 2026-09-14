@@ -2,6 +2,7 @@ package notification
 
 import (
 	"fmt"
+	"unicode/utf8"
 )
 
 //nolint:govet
@@ -23,6 +24,9 @@ func (n Notification) Validate() error {
 	}
 	if n.Channel == "" {
 		return fmt.Errorf("%s: channel is required", op)
+	}
+	if utf8.RuneCountInString(n.Channel) > 20 {
+		return fmt.Errorf("%s: channel is long", op)
 	}
 	return nil
 }
