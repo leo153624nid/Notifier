@@ -107,23 +107,10 @@ func main() {
 	}
 	logger.Info("database connected")
 
-	const createTable = `
-	CREATE TABLE IF NOT EXISTS notifications (
-		id SERIAL PRIMARY KEY,
-		recipient TEXT NOT NULL,
-		subject TEXT NOT NULL,
-		body TEXT,
-		channel TEXT,
-		is_urgent BOOLEAN DEFAULT false,
-		status TEXT NOT NULL DEFAULT 'pending'
-	)
-	`
-	_, err = db.Exec(ctxInit, createTable)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "create table failed: %s\n", err)
-		os.Exit(1)
-	}
-	logger.Info("table ready")
+	// Схема БД управляется отдельным шагом деплоя (cmd/migrate, см.
+	// Makefile: migrate-up / docker-compose.yml: сервис migrate), а не
+	// приложением — так безопаснее при нескольких репликах и позволяет
+	// откатывать миграции независимо от релизов сервиса.
 
 	store := store.NewPostgresStore(db, logger)
 

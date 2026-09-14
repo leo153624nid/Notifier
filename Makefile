@@ -4,6 +4,9 @@ BINARY_NAME := notifier
 MAIN_PKG := ./cmd/notifier
 BINARY := bin/$(BINARY_NAME)
 
+MIGRATE_PKG := ./cmd/migrate
+MIGRATE_BINARY := bin/migrate
+
 # ---- единая точка конфигурации ----
 # ENV_FILE выбирает окружение: .env (дев, по умолчанию) или .env.prod (прод).
 # Пример: make docker-up ENV_FILE=.env.prod
@@ -20,13 +23,33 @@ LOG_LEVEL ?= info
 
 export
 
-.PHONY: build run test test-race lint clean docker-build docker-up docker-start docker-stop docker-down docker-logs release ci help
+.PHONY: build run test test-race lint clean docker-build docker-up docker-start docker-stop docker-down docker-logs release ci help \
+	migrate-build migrate-up migrate-down migrate-version migrate-create
 
 build: ## собрать бинарник в bin/
 	go build -o $(BINARY) $(MAIN_PKG)
 
 run: build ## собрать и запустить сервис локально (переменные из $(ENV_FILE))
 	$(BINARY)
+
+migrate-build: ## собрать бинарник миграций в bin/
+	go build -o $(MIGRATE_BINARY) $(MIGRATE_PKG)
+
+migrate-up: migrate-build ## применить все непринятые миграции (к $(ENV_FILE))
+	$(MIGRATE_BINARY) up
+
+migrate-down: migrate-build ## откатить последнюю применённую миграцию
+	$(MIGRATE_BINARY) down
+
+migrate-version: migrate-build ## показать текущую версию схемы БД
+	$(MIGRATE_BINARY) version
+
+migrate-create: ## создать пару файлов миграции: make migrate-create name=add_foo
+	@test -n "$(name)" || (echo "usage: make migrate-create name=<snake_case_name>" >&2; exit 1)
+	@ts=$$(date +%Y%m%d%H%M%S); \
+	dir=internal/migrations; \
+	touch $$dir/$${ts}_$(name).up.sql $$dir/$${ts}_$(name).down.sql; \
+	echo "created $$dir/$${ts}_$(name).{up,down}.sql"
 
 test: ## запустить тесты
 	go test ./...
@@ -67,7 +90,7 @@ release: ## Собрать релизные бинарники в dist/
 			go build -ldflags='-s -w' -o dist/notifier-$$GOOS-$$GOARCH ./cmd/notifier; \
 	done
 
-ci: lint test-race build ## Прогнать все проверки CI локально
+ci: lint test-race build migrate-build ## Прогнать все проверки CI локально
 
 help: ## подсказать
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'

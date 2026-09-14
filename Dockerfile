@@ -7,11 +7,13 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /notifier ./cmd/notifier
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /migrate ./cmd/migrate
 
 FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /notifier /notifier
+COPY --from=builder /migrate /migrate
 
 # непривилегированный пользователь: в scratch нет /etc/passwd,
 # но числовой UID/GID ядру достаточен и без записи в passwd

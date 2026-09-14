@@ -17,6 +17,24 @@ services:
       timeout: 5s
       retries: 5
 
+  migrate:
+    build: .
+    image: notifier
+    container_name: notifier_migrate
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: ${PG_USER:-notifier}
+      PG_PASSWORD: ${PG_PASSWORD:-notifier}
+      PG_DBNAME: ${PG_DBNAME:-notifier}
+      PG_SSLMODE: ${PG_SSLMODE:-disable}
+    entrypoint: ["/migrate"]
+    command: ["up"]
+
   notifier:
     build: .
     image: notifier
@@ -25,6 +43,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       PORT: ${PORT:-8080}
       API_KEY: ${API_KEY:-secret}

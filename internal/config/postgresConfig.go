@@ -16,8 +16,18 @@ type PostgresConfig struct {
 }
 
 func (c PostgresConfig) DSN() string {
+	return c.dsn("postgres")
+}
+
+// MigrateDSN возвращает DSN со схемой pgx5, которую ожидает драйвер
+// golang-migrate/migrate/v4/database/pgx/v5 (см. cmd/migrate).
+func (c PostgresConfig) MigrateDSN() string {
+	return c.dsn("pgx5")
+}
+
+func (c PostgresConfig) dsn(scheme string) string {
 	u := url.URL{
-		Scheme: "postgres",
+		Scheme: scheme,
 		User:   url.UserPassword(c.User, c.Password),
 		Host:   fmt.Sprintf("%s:%s", c.Host, c.Port),
 		Path:   "/" + c.DBName,
