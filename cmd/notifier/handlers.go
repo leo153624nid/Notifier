@@ -17,7 +17,7 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
 	defer cancel()
 
-	err := s.db.PingContext(ctx)
+	err := s.db.Ping(ctx)
 	if err != nil {
 		s.logger.Error("db ping failed", "op", op, "error", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -56,7 +56,7 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	n, err := s.store.GetById(id)
+	n, err := s.store.GetById(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, notification.ErrNotFound) {
 			SendJSONError(w, notification.ErrNotFound.Error(), http.StatusNotFound)
@@ -82,7 +82,7 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	const op = "Server.listNotifications"
 
-	notifications, err := s.store.GetAll()
+	notifications, err := s.store.GetAll(r.Context())
 	if err != nil {
 		s.logger.Error("store getAll failed", "op", op, "error", err)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
@@ -129,7 +129,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := s.store.Save(n)
+	id, err := s.store.Save(r.Context(), n)
 	if err != nil {
 		s.logger.Error("save failed", "error", err)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
@@ -143,16 +143,20 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 	go func(n notification.Notification) {
 		defer s.wg.Done()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
+		sendCtx, sendCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer sendCancel()
 
-		if senderErr := sender.Send(ctx, n); senderErr != nil {
+		status := "sent"
+		if senderErr := sender.Send(sendCtx, n); senderErr != nil {
 			reqLogger.Error("send failed", "id", id, "error", senderErr)
-			_ = s.store.UpdateStatus(id, "failed")
+			status = "failed"
 		} else {
 			reqLogger.Info("notification sent", "id", id, "channel", n.Channel)
-			_ = s.store.UpdateStatus(id, "sent")
 		}
+
+		updateCtx, updateCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer updateCancel()
+		_ = s.store.UpdateStatus(updateCtx, id, status)
 	}(n)
 
 	js, err := json.Marshal(n)
@@ -169,7 +173,7 @@ func (s *Server) createNotification(w http.ResponseWriter, r *http.Request) {
 func (s *Server) exportNotification(w http.ResponseWriter, r *http.Request) {
 	const op = "Server.exportNotification"
 
-	notifications, err := s.store.GetAll()
+	notifications, err := s.store.GetAll(r.Context())
 	if err != nil {
 		s.logger.Error("get all notifications failed", "op", op, "error", err)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)

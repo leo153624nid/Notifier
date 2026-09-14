@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -23,7 +24,7 @@ func TestMemoryStore_ConcurrentSave(t *testing.T) {
 				Subject:   "Test",
 				Channel:   "console",
 			}
-			_, err := store.Save(n)
+			_, err := store.Save(context.Background(), n)
 			if err != nil {
 				t.Errorf("Save() error: %s", err)
 			}
@@ -32,7 +33,7 @@ func TestMemoryStore_ConcurrentSave(t *testing.T) {
 
 	wg.Wait()
 
-	all, err := store.GetAll()
+	all, err := store.GetAll(context.Background())
 	if err != nil {
 		t.Fatalf("GetAll() error: %s", err)
 	}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // need to init driver, but nothing to call
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/time/rate"
 
 	"notifier/internal/config"
@@ -31,9 +30,15 @@ const (
 	serverIdleTimeout       = 60 * time.Second
 )
 
+// dbPinger is the subset of *pgxpool.Pool the Server needs for health checks;
+// keeping it as an interface lets tests stub it out without a real pool.
+type dbPinger interface {
+	Ping(ctx context.Context) error
+}
+
 type Server struct {
 	store       store.Store
-	db          *sql.DB
+	db          dbPinger
 	logger      *slog.Logger
 	senders     map[string]sender.Sender
 	auditLogger *AuditLogger
@@ -42,7 +47,7 @@ type Server struct {
 
 func NewServer(
 	store store.Store,
-	db *sql.DB,
+	db dbPinger,
 	logger *slog.Logger,
 	senders map[string]sender.Sender,
 	auditLogger *AuditLogger,
@@ -86,13 +91,16 @@ func main() {
 	opts := &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, opts)).With("service", appName, "version", appVersion)
 
-	db, err := sql.Open("pgx", cfg.DSN)
+	ctxInit, cancelInit := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelInit()
+
+	db, err := pgxpool.New(ctxInit, cfg.DSN)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sql.open: %s\n", err)
+		fmt.Fprintf(os.Stderr, "pgxpool.new: %s\n", err)
 		os.Exit(1)
 	}
 
-	err = db.Ping()
+	err = db.Ping(ctxInit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "db ping failed: %s\n", err)
 		os.Exit(1)
@@ -110,7 +118,7 @@ func main() {
 		status TEXT NOT NULL DEFAULT 'pending'
 	)
 	`
-	_, err = db.Exec(createTable)
+	_, err = db.Exec(ctxInit, createTable)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "create table failed: %s\n", err)
 		os.Exit(1)
@@ -183,9 +191,7 @@ func main() {
 	ipLimiter.Stop()
 
 	logger.Info("closing database")
-	if err := db.Close(); err != nil {
-		logger.Error("db closing failed", "error", err)
-	}
+	db.Close()
 
 	logger.Info("shutdown completed")
 }

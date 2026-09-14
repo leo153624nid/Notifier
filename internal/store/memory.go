@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -20,7 +21,7 @@ func NewMemoryStore() *MemoryStore {
 	}
 }
 
-func (s *MemoryStore) Save(n notification.Notification) (int, error) {
+func (s *MemoryStore) Save(_ context.Context, n notification.Notification) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -32,7 +33,7 @@ func (s *MemoryStore) Save(n notification.Notification) (int, error) {
 	return n.ID, nil
 }
 
-func (s *MemoryStore) GetAll() ([]notification.Notification, error) {
+func (s *MemoryStore) GetAll(_ context.Context) ([]notification.Notification, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -45,7 +46,7 @@ func (s *MemoryStore) GetAll() ([]notification.Notification, error) {
 	return result, nil
 }
 
-func (s *MemoryStore) GetById(id int) (notification.Notification, error) {
+func (s *MemoryStore) GetById(_ context.Context, id int) (notification.Notification, error) {
 	const op = "MemoryStore.GetById"
 
 	s.mu.Lock()
@@ -60,7 +61,7 @@ func (s *MemoryStore) GetById(id int) (notification.Notification, error) {
 	return n, nil
 }
 
-func (s *MemoryStore) UpdateStatus(id int, status string) error {
+func (s *MemoryStore) UpdateStatus(_ context.Context, id int, status string) error {
 	const op = "MemoryStore.UpdateStatus"
 
 	s.mu.Lock()

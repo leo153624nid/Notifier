@@ -1,21 +1,30 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
-
 	"notifier/internal/notification"
 	"notifier/internal/sender"
 	"notifier/internal/store"
 )
+
+// fakePinger is a stub dbPinger for tests that don't need a real database connection.
+type fakePinger struct {
+	err error
+}
+
+func (f fakePinger) Ping(context.Context) error {
+	return f.err
+}
 
 func TestNewServer(t *testing.T) {
 	store := store.NewMemoryStore()
@@ -78,13 +87,6 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestHealthHandler(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("sqlmock.New() error: %s", err)
-	}
-	defer func() { _ = db.Close() }()
-	mock.ExpectPing()
-
 	store := store.NewMemoryStore()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	senders := map[string]sender.Sender{
@@ -92,7 +94,7 @@ func TestHealthHandler(t *testing.T) {
 	}
 	auditLogger := NewAuditLogger(t.TempDir() + "/audit.log")
 
-	s, err := NewServer(store, db, logger, senders, auditLogger)
+	s, err := NewServer(store, fakePinger{}, logger, senders, auditLogger)
 	if err != nil {
 		t.Fatalf("NewServer() error: %s", err)
 	}
@@ -108,8 +110,28 @@ func TestHealthHandler(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "available") {
 		t.Errorf("body = %q, want contains %q", w.Body.String(), "available")
 	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unmet sqlmock expectations: %s", err)
+}
+
+func TestHealthHandler_DBUnavailable(t *testing.T) {
+	store := store.NewMemoryStore()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	senders := map[string]sender.Sender{
+		"console": &sender.MockSender{},
+	}
+	auditLogger := NewAuditLogger(t.TempDir() + "/audit.log")
+
+	s, err := NewServer(store, fakePinger{err: errors.New("connection refused")}, logger, senders, auditLogger)
+	if err != nil {
+		t.Fatalf("NewServer() error: %s", err)
+	}
+
+	r := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+
+	s.healthHandler(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 }
 
@@ -228,7 +250,7 @@ func TestGetNotification(t *testing.T) {
 				Channel:   "email",
 				IsUrgent:  false,
 			}
-			_, err = s.store.Save(n)
+			_, err = s.store.Save(context.Background(), n)
 			if err != nil {
 				t.Fatalf("save notification error: %s", err)
 			}
@@ -294,7 +316,7 @@ func TestListNotifications(t *testing.T) {
 					Recipient: fmt.Sprintf("recipient #%d", v),
 					Channel:   "email",
 				}
-				_, _ = s.store.Save(n)
+				_, _ = s.store.Save(context.Background(), n)
 			}
 
 			r := httptest.NewRequest("GET", "/api/notifications", nil)
@@ -331,7 +353,7 @@ func TestErrNotFoundThroughChain(t *testing.T) {
 		t.Fatalf("NewSever() error: %s", err)
 	}
 
-	_, err = s.store.GetById(9999)
+	_, err = s.store.GetById(context.Background(), 9999)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
