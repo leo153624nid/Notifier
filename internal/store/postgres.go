@@ -66,6 +66,34 @@ func (s *PostgresStore) GetAll(ctx context.Context) ([]notification.Notification
 	return result, nil
 }
 
+func (s *PostgresStore) GetList(ctx context.Context, page int, size int) ([]notification.Notification, error) {
+	const op = "PostgresStore.GetList"
+
+	rows, err := s.db.Query(
+		ctx,
+		`SELECT 
+		id, recipient, subject, body, channel, is_urgent, status 
+		FROM notifications ORDER BY id LIMIT $1 OFFSET $2`,
+		size,
+		(page-1)*size,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%s: query: %w", op, err)
+	}
+	defer rows.Close()
+
+	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (notification.Notification, error) {
+		var n notification.Notification
+		scanErr := row.Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
+		return n, scanErr
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: collect: %w", op, err)
+	}
+
+	return result, nil
+}
+
 func (s *PostgresStore) GetById(ctx context.Context, id int) (notification.Notification, error) {
 	const op = "PostgresStore.GetById"
 

@@ -82,9 +82,22 @@ func (s *Server) getNotification(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listNotifications(w http.ResponseWriter, r *http.Request) {
 	const op = "Server.listNotifications"
 
-	notifications, err := s.store.GetAll(r.Context())
+	query := r.URL.Query()
+	page, err := strconv.Atoi(query.Get("page"))
+	if err != nil || page <= 0 {
+		page = 1
+	}
+	size, err := strconv.Atoi(query.Get("size"))
+	if err != nil || size <= 0 {
+		size = 10
+	}
+	if size > 100 {
+		size = 100
+	}
+
+	notifications, err := s.store.GetList(r.Context(), page, size)
 	if err != nil {
-		s.logger.Error("store getAll failed", "op", op, "error", err)
+		s.logger.Error("store get list failed", "op", op, "error", err)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
