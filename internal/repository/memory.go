@@ -1,4 +1,4 @@
-package store
+package repository
 
 import (
 	"cmp"
@@ -10,45 +10,45 @@ import (
 	"notifier/internal/notification"
 )
 
-type MemoryStore struct {
+type MemoryRepository struct {
 	notifications map[int]notification.Notification
 	nextID        int
 	mu            sync.Mutex
 }
 
-func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{
+func NewMemoryRepository() *MemoryRepository {
+	return &MemoryRepository{
 		notifications: make(map[int]notification.Notification),
 		nextID:        0,
 	}
 }
 
-func (s *MemoryStore) Save(_ context.Context, n notification.Notification) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (r *MemoryRepository) Save(_ context.Context, n notification.Notification) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	s.nextID++
-	n.ID = s.nextID
+	r.nextID++
+	n.ID = r.nextID
 	n.Status = "pending"
-	s.notifications[n.ID] = n
+	r.notifications[n.ID] = n
 
 	return n.ID, nil
 }
 
-func (s *MemoryStore) GetAll(_ context.Context) ([]notification.Notification, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (r *MemoryRepository) GetAll(_ context.Context) ([]notification.Notification, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	result := make([]notification.Notification, 0, len(s.notifications))
+	result := make([]notification.Notification, 0, len(r.notifications))
 
-	for _, n := range s.notifications {
+	for _, n := range r.notifications {
 		result = append(result, n)
 	}
 
 	return result, nil
 }
 
-func (s *MemoryStore) GetList(ctx context.Context, page int, size int) ([]notification.Notification, error) {
+func (r *MemoryRepository) GetList(ctx context.Context, page int, size int) ([]notification.Notification, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -59,7 +59,7 @@ func (s *MemoryStore) GetList(ctx context.Context, page int, size int) ([]notifi
 		size = 100
 	}
 
-	all, err := s.GetAll(ctx)
+	all, err := r.GetAll(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -81,13 +81,13 @@ func (s *MemoryStore) GetList(ctx context.Context, page int, size int) ([]notifi
 	return result, nil
 }
 
-func (s *MemoryStore) GetById(_ context.Context, id int) (notification.Notification, error) {
-	const op = "MemoryStore.GetById"
+func (r *MemoryRepository) GetById(_ context.Context, id int) (notification.Notification, error) {
+	const op = "MemoryRepository.GetById"
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	n, ok := s.notifications[id]
+	n, ok := r.notifications[id]
 	if !ok {
 		err := fmt.Errorf("%s: %w", op, notification.ErrNotFound)
 		return notification.Notification{}, err
@@ -96,19 +96,19 @@ func (s *MemoryStore) GetById(_ context.Context, id int) (notification.Notificat
 	return n, nil
 }
 
-func (s *MemoryStore) UpdateStatus(_ context.Context, id int, status string) error {
-	const op = "MemoryStore.UpdateStatus"
+func (r *MemoryRepository) UpdateStatus(_ context.Context, id int, status string) error {
+	const op = "MemoryRepository.UpdateStatus"
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	n, ok := s.notifications[id]
+	n, ok := r.notifications[id]
 	if !ok {
 		return fmt.Errorf("%s: %w", op, notification.ErrNotFound)
 	}
 
 	n.Status = status
-	s.notifications[id] = n
+	r.notifications[id] = n
 
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"notifier/internal/notification"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -14,11 +15,17 @@ type Sender interface {
 	Send(ctx context.Context, n notification.Notification) error
 }
 
+// MockSender — тестовый Sender. Безопасен для конкурентных вызовов Send,
+// поскольку в реальном коде отправка выполняется из фоновых горутин.
 type MockSender struct {
 	Calls []notification.Notification
+	mu    sync.Mutex
 }
 
 func (m *MockSender) Send(ctx context.Context, n notification.Notification) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.Calls = append(m.Calls, n)
 	return nil
 }

@@ -1,4 +1,4 @@
-package store
+package repository
 
 import (
 	"context"
@@ -12,23 +12,23 @@ import (
 	"notifier/internal/notification"
 )
 
-type PostgresStore struct {
+type PostgresRepository struct {
 	db     *pgxpool.Pool
 	logger *slog.Logger
 }
 
-func NewPostgresStore(db *pgxpool.Pool, logger *slog.Logger) *PostgresStore {
-	return &PostgresStore{
+func NewPostgresRepository(db *pgxpool.Pool, logger *slog.Logger) *PostgresRepository {
+	return &PostgresRepository{
 		db:     db,
 		logger: logger,
 	}
 }
 
-func (s *PostgresStore) Save(ctx context.Context, n notification.Notification) (int, error) {
-	const op = "PostgresStore.Save"
+func (r *PostgresRepository) Save(ctx context.Context, n notification.Notification) (int, error) {
+	const op = "PostgresRepository.Save"
 
 	var id int
-	err := s.db.QueryRow(
+	err := r.db.QueryRow(
 		ctx,
 		`INSERT INTO notifications (recipient, subject, body, channel, is_urgent, status)
 		VALUES ($1, $2, $3, $4, $5, 'pending')
@@ -42,12 +42,14 @@ func (s *PostgresStore) Save(ctx context.Context, n notification.Notification) (
 	return id, nil
 }
 
-func (s *PostgresStore) GetAll(ctx context.Context) ([]notification.Notification, error) {
-	const op = "PostgresStore.GetAll"
+func (r *PostgresRepository) GetAll(ctx context.Context) ([]notification.Notification, error) {
+	const op = "PostgresRepository.GetAll"
 
-	rows, err := s.db.Query(
+	rows, err := r.db.Query(
 		ctx,
-		`SELECT id, recipient, subject, body, channel, is_urgent, status FROM notifications ORDER BY id`,
+		`SELECT 
+		id, recipient, subject, body, channel, is_urgent, status 
+		FROM notifications ORDER BY id`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: query: %w", op, err)
@@ -66,13 +68,13 @@ func (s *PostgresStore) GetAll(ctx context.Context) ([]notification.Notification
 	return result, nil
 }
 
-func (s *PostgresStore) GetList(ctx context.Context, page int, size int) ([]notification.Notification, error) {
-	const op = "PostgresStore.GetList"
+func (r *PostgresRepository) GetList(ctx context.Context, page int, size int) ([]notification.Notification, error) {
+	const op = "PostgresRepository.GetList"
 
-	rows, err := s.db.Query(
+	rows, err := r.db.Query(
 		ctx,
-		`SELECT 
-		id, recipient, subject, body, channel, is_urgent, status 
+		`SELECT
+		id, recipient, subject, body, channel, is_urgent, status
 		FROM notifications ORDER BY id LIMIT $1 OFFSET $2`,
 		size,
 		(page-1)*size,
@@ -94,13 +96,15 @@ func (s *PostgresStore) GetList(ctx context.Context, page int, size int) ([]noti
 	return result, nil
 }
 
-func (s *PostgresStore) GetById(ctx context.Context, id int) (notification.Notification, error) {
-	const op = "PostgresStore.GetById"
+func (r *PostgresRepository) GetById(ctx context.Context, id int) (notification.Notification, error) {
+	const op = "PostgresRepository.GetById"
 
 	var n notification.Notification
-	err := s.db.QueryRow(
+	err := r.db.QueryRow(
 		ctx,
-		`SELECT id, recipient, subject, body, channel, is_urgent, status FROM notifications WHERE id=$1`,
+		`SELECT 
+		id, recipient, subject, body, channel, is_urgent, status 
+		FROM notifications WHERE id=$1`,
 		id,
 	).Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
 
@@ -114,10 +118,10 @@ func (s *PostgresStore) GetById(ctx context.Context, id int) (notification.Notif
 	return n, nil
 }
 
-func (s *PostgresStore) UpdateStatus(ctx context.Context, id int, status string) error {
-	const op = "PostgresStore.UpdateStatus"
+func (r *PostgresRepository) UpdateStatus(ctx context.Context, id int, status string) error {
+	const op = "PostgresRepository.UpdateStatus"
 
-	tag, err := s.db.Exec(
+	tag, err := r.db.Exec(
 		ctx,
 		`UPDATE notifications SET status=$1 WHERE id=$2`,
 		status, id,

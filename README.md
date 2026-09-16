@@ -172,10 +172,15 @@ make help
 
 ## Структура проекта
 
+Слоистая архитектура: транспорт знает про сервис, сервис — про репозиторий и домен, домен не знает ни о ком.
+
 ```
-cmd/notifier/          точка входа, HTTP-хендлеры, middleware, аудит-лог
-internal/config/       загрузка конфигурации из окружения
-internal/notification/ доменная модель уведомления и валидация
-internal/sender/       отправители уведомлений по каналам (console/email/telegram)
-internal/store/        хранилище (Postgres и in-memory реализации)
+cmd/notifier/              composition root: конфигурация, wiring зависимостей, запуск/graceful shutdown
+internal/transport/http/   HTTP-транспорт: роутинг, middleware, хендлеры, DTO запросов/ответов
+internal/service/          бизнес-логика: валидация, оркестрация отправки, экспорт, health-check
+internal/repository/       доступ к данным (Postgres и in-memory реализации интерфейса Repository)
+internal/notification/     доменная модель уведомления и валидация
+internal/sender/           отправители уведомлений по каналам (console/email/telegram)
+internal/audit/            запись аудит-лога на диск
+internal/config/           загрузка конфигурации из окружения
 ```

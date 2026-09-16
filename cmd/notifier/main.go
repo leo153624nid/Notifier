@@ -8,16 +8,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/time/rate"
 
+	"notifier/internal/audit"
 	"notifier/internal/config"
+	"notifier/internal/repository"
 	"notifier/internal/sender"
-	"notifier/internal/store"
+	"notifier/internal/service"
+	transporthttp "notifier/internal/transport/http"
 )
 
 const (
@@ -30,55 +32,20 @@ const (
 	serverIdleTimeout       = 60 * time.Second
 )
 
-// dbPinger is the subset of *pgxpool.Pool the Server needs for health checks;
-// keeping it as an interface lets tests stub it out without a real pool.
-type dbPinger interface {
-	Ping(ctx context.Context) error
-}
-
-type Server struct {
-	store       store.Store
-	db          dbPinger
-	logger      *slog.Logger
-	senders     map[string]sender.Sender
-	auditLogger *AuditLogger
-	wg          sync.WaitGroup
-}
-
-func NewServer(
-	store store.Store,
-	db dbPinger,
-	logger *slog.Logger,
-	senders map[string]sender.Sender,
-	auditLogger *AuditLogger,
-) (*Server, error) {
-	const op = "NewServer"
-
-	if store == nil {
-		return nil, fmt.Errorf("%s: store is required", op)
-	}
-	// Check db == nil not needed
-	if logger == nil {
-		return nil, fmt.Errorf("%s: logger is required", op)
-	}
-	if len(senders) == 0 {
-		return nil, fmt.Errorf("%s: senders is required", op)
-	}
-	if auditLogger == nil {
-		return nil, fmt.Errorf("%s: auditLogger is required", op)
+// parseLevel преобразует строковый уровень логирования из конфигурации в slog.Level.
+func parseLevel(s string) slog.Level {
+	levels := map[string]slog.Level{
+		"debug": slog.LevelDebug,
+		"info":  slog.LevelInfo,
+		"warn":  slog.LevelWarn,
+		"error": slog.LevelError,
 	}
 
-	return &Server{
-		store:       store,
-		db:          db,
-		logger:      logger,
-		senders:     senders,
-		auditLogger: auditLogger,
-	}, nil
-}
+	if lvl, ok := levels[strings.ToLower(s)]; ok {
+		return lvl
+	}
 
-func (s *Server) OnShutdown() {
-	s.wg.Wait()
+	return slog.LevelInfo
 }
 
 func main() {
@@ -112,7 +79,7 @@ func main() {
 	// приложением — так безопаснее при нескольких репликах и позволяет
 	// откатывать миграции независимо от релизов сервиса.
 
-	store := store.NewPostgresStore(db, logger)
+	repo := repository.NewPostgresRepository(db, logger)
 
 	senders := map[string]sender.Sender{
 		"console":  sender.LoggingSender{Sender: sender.NewConsoleSender(os.Stdout), Logger: logger},
@@ -120,29 +87,21 @@ func main() {
 		"telegram": sender.LoggingSender{Sender: sender.TelegramSender{}, Logger: logger},
 	}
 
-	auditLogger := NewAuditLogger(cfg.AuditLogPath)
+	auditLogger := audit.NewLogger(cfg.AuditLogPath)
 
-	s, err := NewServer(store, db, logger, senders, auditLogger)
+	notificationService, err := service.NewNotificationService(repo, senders, auditLogger, logger)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "server: %s\n", err)
+		fmt.Fprintf(os.Stderr, "service: %s\n", err)
 		os.Exit(1)
 	}
+	healthService := service.NewHealthService(db)
 
-	auth := authMiddleware(cfg.APIkey, logger)
-
-	ipLimiter := newIPRateLimiter(rate.Limit(10), 20)
-	rateLimit := rateLimiterMiddleware(ipLimiter)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", s.healthHandler)
-	mux.Handle("GET /api/v1/notifications", rateLimit(auth(http.HandlerFunc(s.listNotifications))))
-	mux.Handle("GET /api/v1/notifications/export", rateLimit(auth(http.HandlerFunc(s.exportNotification))))
-	mux.Handle("GET /api/v1/notifications/{id}", rateLimit(auth(http.HandlerFunc(s.getNotification))))
-	mux.Handle("POST /api/v1/notifications", rateLimit(auth(http.HandlerFunc(s.createNotification))))
+	handler := transporthttp.NewHandler(notificationService, healthService, logger, appName, appVersion)
+	router := transporthttp.NewRouter(handler, cfg.APIkey, logger)
 
 	srv := &http.Server{
 		Addr:              cfg.Port,
-		Handler:           requestID(s.logRequest(contentType(mux))),
+		Handler:           router,
 		ReadHeaderTimeout: serverReadHeaderTimeout,
 		ReadTimeout:       serverReadTimeout,
 		WriteTimeout:      serverWriteTimeout,
@@ -150,11 +109,11 @@ func main() {
 	}
 
 	go func() {
-		s.logger.Info("starting http server", "port", cfg.Port)
+		logger.Info("starting http server", "port", cfg.Port)
 
 		err = srv.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.logger.Error("Error starting http server", "error", err)
+			logger.Error("Error starting http server", "error", err)
 		}
 	}()
 
@@ -173,9 +132,9 @@ func main() {
 	}
 
 	logger.Info("waiting for background tasks")
-	s.OnShutdown()
+	notificationService.Wait()
 
-	ipLimiter.Stop()
+	router.Stop()
 
 	logger.Info("closing database")
 	db.Close()

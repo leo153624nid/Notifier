@@ -1,4 +1,4 @@
-package store
+package repository
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"notifier/internal/notification"
 )
 
-type Store interface {
+type Repository interface {
 	Save(ctx context.Context, n notification.Notification) (int, error)
 	GetAll(ctx context.Context) ([]notification.Notification, error)
 	GetList(ctx context.Context, page int, size int) ([]notification.Notification, error)

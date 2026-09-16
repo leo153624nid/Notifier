@@ -1,4 +1,4 @@
-package store
+package repository
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"notifier/internal/notification"
 )
 
-func TestMemoryStore_ConcurrentSave(t *testing.T) {
-	store := NewMemoryStore()
+func TestMemoryRepository_ConcurrentSave(t *testing.T) {
+	repo := NewMemoryRepository()
 	var wg sync.WaitGroup
 
 	const count = 1000
@@ -24,7 +24,7 @@ func TestMemoryStore_ConcurrentSave(t *testing.T) {
 				Subject:   "Test",
 				Channel:   "console",
 			}
-			_, err := store.Save(context.Background(), n)
+			_, err := repo.Save(context.Background(), n)
 			if err != nil {
 				t.Errorf("Save() error: %s", err)
 			}
@@ -33,7 +33,7 @@ func TestMemoryStore_ConcurrentSave(t *testing.T) {
 
 	wg.Wait()
 
-	all, err := store.GetAll(context.Background())
+	all, err := repo.GetAll(context.Background())
 	if err != nil {
 		t.Fatalf("GetAll() error: %s", err)
 	}
@@ -151,12 +151,12 @@ func TestGetList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := NewMemoryStore()
+			repo := NewMemoryRepository()
 			for _, n := range tt.all {
-				store.notifications[n.ID] = n
+				repo.notifications[n.ID] = n
 			}
 
-			list, _ := store.GetList(context.Background(), tt.page, tt.size)
+			list, _ := repo.GetList(context.Background(), tt.page, tt.size)
 
 			if len(list) != tt.len {
 				t.Errorf("list len %d, want %d", len(list), tt.len)

@@ -1,4 +1,4 @@
-package main
+package audit
 
 import (
 	"fmt"
@@ -8,22 +8,22 @@ import (
 	"notifier/internal/notification"
 )
 
-type AuditLogger struct {
+type Logger struct {
 	path string
 	mu   sync.Mutex
 }
 
-func NewAuditLogger(path string) *AuditLogger {
-	return &AuditLogger{path: path}
+func NewLogger(path string) *Logger {
+	return &Logger{path: path}
 }
 
-func (a *AuditLogger) Write(notifications []notification.Notification) error {
-	const op = "AuditLogger.Write"
+func (l *Logger) Write(notifications []notification.Notification) error {
+	const op = "audit.Logger.Write"
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	f, err := os.Create(a.path)
+	f, err := os.Create(l.path)
 	if err != nil {
 		return fmt.Errorf("%s: create: %w", op, err)
 	}
