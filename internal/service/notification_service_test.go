@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"notifier/internal/audit"
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 )
@@ -76,31 +76,31 @@ func TestNotificationService_Create(t *testing.T) {
 	//nolint:govet
 	tests := []struct {
 		name      string
-		n         notification.Notification
+		n         domain.Notification
 		wantErr   error
 		wantCalls int
 	}{
 		{
 			name:      "valid request",
-			n:         notification.Notification{Recipient: "user@example.com", Subject: "some", Channel: "email"},
+			n:         domain.Notification{Recipient: "user@example.com", Subject: "some", Channel: "email"},
 			wantErr:   nil,
 			wantCalls: 1,
 		},
 		{
 			name:      "empty recipient",
-			n:         notification.Notification{Recipient: "", Subject: "some", Channel: "email"},
+			n:         domain.Notification{Recipient: "", Subject: "some", Channel: "email"},
 			wantErr:   ErrInvalidNotification,
 			wantCalls: 0,
 		},
 		{
 			name:      "empty channel",
-			n:         notification.Notification{Recipient: "user@example.com", Subject: "some", Channel: ""},
+			n:         domain.Notification{Recipient: "user@example.com", Subject: "some", Channel: ""},
 			wantErr:   ErrInvalidNotification,
 			wantCalls: 0,
 		},
 		{
 			name:      "unknown channel",
-			n:         notification.Notification{Recipient: "user@example.com", Subject: "some", Channel: "sms"},
+			n:         domain.Notification{Recipient: "user@example.com", Subject: "some", Channel: "sms"},
 			wantErr:   ErrUnsupportedChannel,
 			wantCalls: 0,
 		},
@@ -131,7 +131,7 @@ func TestNotificationService_Create_UpdatesStatusAfterSend(t *testing.T) {
 	mock := &sender.MockSender{}
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
 
-	n, err := s.Create(context.Background(), notification.Notification{
+	n, err := s.Create(context.Background(), domain.Notification{
 		Recipient: "user@example.com",
 		Channel:   "email",
 	}, "req-1")
@@ -157,7 +157,7 @@ func TestNotificationService_Get(t *testing.T) {
 	mock := &sender.MockSender{}
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
 
-	created, err := s.Create(context.Background(), notification.Notification{
+	created, err := s.Create(context.Background(), domain.Notification{
 		Recipient: "needed recipient",
 		Channel:   "email",
 	}, "req-1")
@@ -175,7 +175,7 @@ func TestNotificationService_Get(t *testing.T) {
 	}
 
 	_, err = s.Get(context.Background(), 9999)
-	if !errors.Is(err, notification.ErrNotFound) {
+	if !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("error = %v, want ErrNotFound", err)
 	}
 }
@@ -185,7 +185,7 @@ func TestNotificationService_List(t *testing.T) {
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
 
 	for i := range 3 {
-		_, err := s.Create(context.Background(), notification.Notification{
+		_, err := s.Create(context.Background(), domain.Notification{
 			Recipient: fmt.Sprintf("recipient #%d", i),
 			Channel:   "email",
 		}, "req-1")
@@ -209,7 +209,7 @@ func TestNotificationService_Export(t *testing.T) {
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
 
 	for i := range 2 {
-		_, err := s.Create(context.Background(), notification.Notification{
+		_, err := s.Create(context.Background(), domain.Notification{
 			Recipient: fmt.Sprintf("recipient #%d", i),
 			Channel:   "email",
 		}, "req-1")

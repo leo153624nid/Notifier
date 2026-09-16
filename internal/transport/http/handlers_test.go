@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"notifier/internal/audit"
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 	"notifier/internal/service"
@@ -241,8 +241,8 @@ func TestListNotifications(t *testing.T) {
 	}
 }
 
-func notificationFixture() notification.Notification {
-	return notification.Notification{
+func notificationFixture() domain.Notification {
+	return domain.Notification{
 		Recipient: "needed recipient",
 		Subject:   "Test Notification",
 		Body:      "This is a test notification.",

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 )
 
 func TestMemoryRepository_ConcurrentSave(t *testing.T) {
@@ -19,7 +19,7 @@ func TestMemoryRepository_ConcurrentSave(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 
-			n := notification.Notification{
+			n := domain.Notification{
 				Recipient: fmt.Sprintf("user%d@example.com", i),
 				Subject:   "Test",
 				Channel:   "console",
@@ -43,7 +43,7 @@ func TestMemoryRepository_ConcurrentSave(t *testing.T) {
 }
 
 func TestGetList(t *testing.T) {
-	all := []notification.Notification{
+	all := []domain.Notification{
 		{ID: 12},
 		{ID: 11},
 		{ID: 10},
@@ -59,7 +59,7 @@ func TestGetList(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		all     []notification.Notification
+		all     []domain.Notification
 		page    int
 		size    int
 		firstID int

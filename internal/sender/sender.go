@@ -5,24 +5,25 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"notifier/internal/notification"
 	"os"
 	"sync"
 	"time"
+
+	"notifier/internal/domain"
 )
 
 type Sender interface {
-	Send(ctx context.Context, n notification.Notification) error
+	Send(ctx context.Context, n domain.Notification) error
 }
 
 // MockSender — тестовый Sender. Безопасен для конкурентных вызовов Send,
 // поскольку в реальном коде отправка выполняется из фоновых горутин.
 type MockSender struct {
-	Calls []notification.Notification
+	Calls []domain.Notification
 	mu    sync.Mutex
 }
 
-func (m *MockSender) Send(ctx context.Context, n notification.Notification) error {
+func (m *MockSender) Send(ctx context.Context, n domain.Notification) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -43,7 +44,7 @@ type EmailSender struct {
 }
 type TelegramSender struct{}
 
-func (ls LoggingSender) Send(ctx context.Context, n notification.Notification) error {
+func (ls LoggingSender) Send(ctx context.Context, n domain.Notification) error {
 	ls.Logger.Info("sending", "to", n.Recipient, "channel", n.Channel)
 
 	err := ls.Sender.Send(ctx, n)
@@ -71,17 +72,17 @@ func NewEmailSender(w io.Writer) *EmailSender {
 	return &EmailSender{w}
 }
 
-func (cs ConsoleSender) Send(ctx context.Context, n notification.Notification) error {
+func (cs ConsoleSender) Send(ctx context.Context, n domain.Notification) error {
 	_, err := fmt.Fprintf(cs.w, "[console] to %s | %s\n", n.Recipient, n.Subject)
 	return err
 }
 
-func (es EmailSender) Send(ctx context.Context, n notification.Notification) error {
+func (es EmailSender) Send(ctx context.Context, n domain.Notification) error {
 	_, err := fmt.Fprintf(es.w, "[email] to %s | %s\n", n.Recipient, n.Subject)
 	return err
 }
 
-func (tg TelegramSender) Send(ctx context.Context, n notification.Notification) error {
+func (tg TelegramSender) Send(ctx context.Context, n domain.Notification) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

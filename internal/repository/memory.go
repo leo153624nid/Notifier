@@ -7,23 +7,23 @@ import (
 	"slices"
 	"sync"
 
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 )
 
 type MemoryRepository struct {
-	notifications map[int]notification.Notification
+	notifications map[int]domain.Notification
 	nextID        int
 	mu            sync.Mutex
 }
 
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
-		notifications: make(map[int]notification.Notification),
+		notifications: make(map[int]domain.Notification),
 		nextID:        0,
 	}
 }
 
-func (r *MemoryRepository) Save(_ context.Context, n notification.Notification) (int, error) {
+func (r *MemoryRepository) Save(_ context.Context, n domain.Notification) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -35,11 +35,11 @@ func (r *MemoryRepository) Save(_ context.Context, n notification.Notification) 
 	return n.ID, nil
 }
 
-func (r *MemoryRepository) GetAll(_ context.Context) ([]notification.Notification, error) {
+func (r *MemoryRepository) GetAll(_ context.Context) ([]domain.Notification, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	result := make([]notification.Notification, 0, len(r.notifications))
+	result := make([]domain.Notification, 0, len(r.notifications))
 
 	for _, n := range r.notifications {
 		result = append(result, n)
@@ -48,7 +48,7 @@ func (r *MemoryRepository) GetAll(_ context.Context) ([]notification.Notificatio
 	return result, nil
 }
 
-func (r *MemoryRepository) GetList(ctx context.Context, page int, size int) ([]notification.Notification, error) {
+func (r *MemoryRepository) GetList(ctx context.Context, page int, size int) ([]domain.Notification, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -66,22 +66,22 @@ func (r *MemoryRepository) GetList(ctx context.Context, page int, size int) ([]n
 
 	firstIndex := (page - 1) * size
 	if firstIndex > len(all)-1 {
-		return []notification.Notification{}, nil
+		return []domain.Notification{}, nil
 	}
 
-	slices.SortFunc(all, func(a, b notification.Notification) int {
+	slices.SortFunc(all, func(a, b domain.Notification) int {
 		return cmp.Compare(a.ID, b.ID)
 	})
 	lastIndex := min(firstIndex+(size-1), len(all)-1)
 	all = all[firstIndex : lastIndex+1]
 
-	result := make([]notification.Notification, len(all), size)
+	result := make([]domain.Notification, len(all), size)
 	copy(result, all)
 
 	return result, nil
 }
 
-func (r *MemoryRepository) GetById(_ context.Context, id int) (notification.Notification, error) {
+func (r *MemoryRepository) GetById(_ context.Context, id int) (domain.Notification, error) {
 	const op = "MemoryRepository.GetById"
 
 	r.mu.Lock()
@@ -89,8 +89,8 @@ func (r *MemoryRepository) GetById(_ context.Context, id int) (notification.Noti
 
 	n, ok := r.notifications[id]
 	if !ok {
-		err := fmt.Errorf("%s: %w", op, notification.ErrNotFound)
-		return notification.Notification{}, err
+		err := fmt.Errorf("%s: %w", op, domain.ErrNotFound)
+		return domain.Notification{}, err
 	}
 
 	return n, nil
@@ -104,7 +104,7 @@ func (r *MemoryRepository) UpdateStatus(_ context.Context, id int, status string
 
 	n, ok := r.notifications[id]
 	if !ok {
-		return fmt.Errorf("%s: %w", op, notification.ErrNotFound)
+		return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
 	}
 
 	n.Status = status

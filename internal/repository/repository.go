@@ -3,13 +3,13 @@ package repository
 import (
 	"context"
 
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 )
 
 type Repository interface {
-	Save(ctx context.Context, n notification.Notification) (int, error)
-	GetAll(ctx context.Context) ([]notification.Notification, error)
-	GetList(ctx context.Context, page int, size int) ([]notification.Notification, error)
-	GetById(ctx context.Context, id int) (notification.Notification, error)
+	Save(ctx context.Context, n domain.Notification) (int, error)
+	GetAll(ctx context.Context) ([]domain.Notification, error)
+	GetList(ctx context.Context, page int, size int) ([]domain.Notification, error)
+	GetById(ctx context.Context, id int) (domain.Notification, error)
 	UpdateStatus(ctx context.Context, id int, status string) error
 }

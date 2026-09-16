@@ -3,7 +3,8 @@ package http
 import (
 	"encoding/json"
 	"net/http"
-	"notifier/internal/notification"
+
+	"notifier/internal/domain"
 )
 
 type APIError struct {
@@ -19,8 +20,8 @@ type CreateNotificationRequest struct {
 	Urgent  bool   `json:"urgent"`
 }
 
-func (r CreateNotificationRequest) toDomain() notification.Notification {
-	return notification.Notification{
+func (r CreateNotificationRequest) toDomain() domain.Notification {
+	return domain.Notification{
 		Recipient: r.To,
 		Subject:   r.Subject,
 		Body:      r.Body,
@@ -42,7 +43,7 @@ type NotificationResponse struct {
 	IsUrgent  bool   `json:"urgent"`
 }
 
-func toNotificationResponse(n notification.Notification) NotificationResponse {
+func toNotificationResponse(n domain.Notification) NotificationResponse {
 	return NotificationResponse{
 		ID:        n.ID,
 		Recipient: n.Recipient,
@@ -54,7 +55,7 @@ func toNotificationResponse(n notification.Notification) NotificationResponse {
 	}
 }
 
-func toNotificationResponses(notifications []notification.Notification) []NotificationResponse {
+func toNotificationResponses(notifications []domain.Notification) []NotificationResponse {
 	result := make([]NotificationResponse, len(notifications))
 	for i, n := range notifications {
 		result[i] = toNotificationResponse(n)

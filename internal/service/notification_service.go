@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"notifier/internal/audit"
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 )
@@ -58,23 +58,23 @@ func NewNotificationService(
 // через выбранный канал и обновляет статус по завершении отправки.
 func (s *NotificationService) Create(
 	ctx context.Context,
-	n notification.Notification,
+	n domain.Notification,
 	requestID string,
-) (notification.Notification, error) {
+) (domain.Notification, error) {
 	const op = "NotificationService.Create"
 
 	if err := n.Validate(); err != nil {
-		return notification.Notification{}, fmt.Errorf("%s: %w: %w", op, ErrInvalidNotification, err)
+		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, ErrInvalidNotification, err)
 	}
 
 	snd, ok := s.senders[n.Channel]
 	if !ok {
-		return notification.Notification{}, fmt.Errorf("%s: %w", op, ErrUnsupportedChannel)
+		return domain.Notification{}, fmt.Errorf("%s: %w", op, ErrUnsupportedChannel)
 	}
 
 	id, err := s.repo.Save(ctx, n)
 	if err != nil {
-		return notification.Notification{}, fmt.Errorf("%s: save: %w", op, err)
+		return domain.Notification{}, fmt.Errorf("%s: save: %w", op, err)
 	}
 
 	n.ID = id
@@ -88,7 +88,7 @@ func (s *NotificationService) Create(
 
 func (s *NotificationService) sendAndUpdateStatus(
 	snd sender.Sender,
-	n notification.Notification,
+	n domain.Notification,
 	requestID string,
 ) {
 	defer s.wg.Done()
@@ -114,19 +114,19 @@ func (s *NotificationService) sendAndUpdateStatus(
 	}
 }
 
-func (s *NotificationService) Get(ctx context.Context, id int) (notification.Notification, error) {
+func (s *NotificationService) Get(ctx context.Context, id int) (domain.Notification, error) {
 	const op = "NotificationService.Get"
 
 	n, err := s.repo.GetById(ctx, id)
 	if err != nil {
-		return notification.Notification{}, fmt.Errorf("%s: %w", op, err)
+		return domain.Notification{}, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return n, nil
 }
 
 // List возвращает страницу уведомлений, нормализуя page/size к разумным значениям по умолчанию.
-func (s *NotificationService) List(ctx context.Context, page int, size int) ([]notification.Notification, error) {
+func (s *NotificationService) List(ctx context.Context, page int, size int) ([]domain.Notification, error) {
 	const op = "NotificationService.List"
 
 	if page <= 0 {

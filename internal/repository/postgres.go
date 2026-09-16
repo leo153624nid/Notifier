@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 )
 
 type PostgresRepository struct {
@@ -24,7 +24,7 @@ func NewPostgresRepository(db *pgxpool.Pool, logger *slog.Logger) *PostgresRepos
 	}
 }
 
-func (r *PostgresRepository) Save(ctx context.Context, n notification.Notification) (int, error) {
+func (r *PostgresRepository) Save(ctx context.Context, n domain.Notification) (int, error) {
 	const op = "PostgresRepository.Save"
 
 	var id int
@@ -42,7 +42,7 @@ func (r *PostgresRepository) Save(ctx context.Context, n notification.Notificati
 	return id, nil
 }
 
-func (r *PostgresRepository) GetAll(ctx context.Context) ([]notification.Notification, error) {
+func (r *PostgresRepository) GetAll(ctx context.Context) ([]domain.Notification, error) {
 	const op = "PostgresRepository.GetAll"
 
 	rows, err := r.db.Query(
@@ -56,8 +56,8 @@ func (r *PostgresRepository) GetAll(ctx context.Context) ([]notification.Notific
 	}
 	defer rows.Close()
 
-	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (notification.Notification, error) {
-		var n notification.Notification
+	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Notification, error) {
+		var n domain.Notification
 		scanErr := row.Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
 		return n, scanErr
 	})
@@ -68,7 +68,7 @@ func (r *PostgresRepository) GetAll(ctx context.Context) ([]notification.Notific
 	return result, nil
 }
 
-func (r *PostgresRepository) GetList(ctx context.Context, page int, size int) ([]notification.Notification, error) {
+func (r *PostgresRepository) GetList(ctx context.Context, page int, size int) ([]domain.Notification, error) {
 	const op = "PostgresRepository.GetList"
 
 	rows, err := r.db.Query(
@@ -84,8 +84,8 @@ func (r *PostgresRepository) GetList(ctx context.Context, page int, size int) ([
 	}
 	defer rows.Close()
 
-	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (notification.Notification, error) {
-		var n notification.Notification
+	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Notification, error) {
+		var n domain.Notification
 		scanErr := row.Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
 		return n, scanErr
 	})
@@ -96,10 +96,10 @@ func (r *PostgresRepository) GetList(ctx context.Context, page int, size int) ([
 	return result, nil
 }
 
-func (r *PostgresRepository) GetById(ctx context.Context, id int) (notification.Notification, error) {
+func (r *PostgresRepository) GetById(ctx context.Context, id int) (domain.Notification, error) {
 	const op = "PostgresRepository.GetById"
 
-	var n notification.Notification
+	var n domain.Notification
 	err := r.db.QueryRow(
 		ctx,
 		`SELECT 
@@ -109,10 +109,10 @@ func (r *PostgresRepository) GetById(ctx context.Context, id int) (notification.
 	).Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return notification.Notification{}, fmt.Errorf("%s: scan: %w", op, notification.ErrNotFound)
+		return domain.Notification{}, fmt.Errorf("%s: scan: %w", op, domain.ErrNotFound)
 	}
 	if err != nil {
-		return notification.Notification{}, fmt.Errorf("%s: scan: %w", op, err)
+		return domain.Notification{}, fmt.Errorf("%s: scan: %w", op, err)
 	}
 
 	return n, nil
@@ -131,7 +131,7 @@ func (r *PostgresRepository) UpdateStatus(ctx context.Context, id int, status st
 	}
 
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("%s: %w", op, notification.ErrNotFound)
+		return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
 	}
 
 	return nil

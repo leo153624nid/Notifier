@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 	"notifier/internal/service"
 )
 
@@ -74,14 +74,14 @@ func (h *Handler) getNotification(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		SendJSONError(w, notification.ErrInvalidId.Error(), http.StatusBadRequest)
+		SendJSONError(w, domain.ErrInvalidID.Error(), http.StatusBadRequest)
 		return
 	}
 
 	n, err := h.notifications.Get(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, notification.ErrNotFound) {
-			SendJSONError(w, notification.ErrNotFound.Error(), http.StatusNotFound)
+		if errors.Is(err, domain.ErrNotFound) {
+			SendJSONError(w, domain.ErrNotFound.Error(), http.StatusNotFound)
 			return
 		}
 

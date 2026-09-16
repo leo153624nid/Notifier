@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 )
 
 type Logger struct {
@@ -17,7 +17,7 @@ func NewLogger(path string) *Logger {
 	return &Logger{path: path}
 }
 
-func (l *Logger) Write(notifications []notification.Notification) error {
+func (l *Logger) Write(notifications []domain.Notification) error {
 	const op = "audit.Logger.Write"
 
 	l.mu.Lock()

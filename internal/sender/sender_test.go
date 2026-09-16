@@ -5,13 +5,13 @@ import (
 	"context"
 	"testing"
 
-	"notifier/internal/notification"
+	"notifier/internal/domain"
 )
 
 func TestConsoleSender(t *testing.T) {
 	var buf bytes.Buffer
 	sender := NewConsoleSender(&buf)
-	n := notification.Notification{
+	n := domain.Notification{
 		ID:        1,
 		Recipient: "test@example.com",
 		Subject:   "Test Notification",
