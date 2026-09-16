@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"notifier/internal/audit"
+	"notifier/internal/cache"
 	"notifier/internal/config"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
@@ -79,7 +80,20 @@ func main() {
 	// приложением — так безопаснее при нескольких репликах и позволяет
 	// откатывать миграции независимо от релизов сервиса.
 
-	repo := repository.NewPostgresRepository(db, logger)
+	postgresRepo := repository.NewPostgresRepository(db, logger)
+
+	ctxRedisInit, cancelRedisInit := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelRedisInit()
+
+	cacheRepo := cache.NewRedisClient(cfg.RedisCfg.Addr, cfg.RedisCfg.Password)
+	_, errRedis := cacheRepo.Ping(ctxRedisInit).Result()
+	if errRedis != nil {
+		fmt.Fprintf(os.Stderr, "redis ping failed: %s\n", err)
+		logger.Error("redis ping failed", "error", errRedis)
+		os.Exit(1)
+	}
+
+	repo := repository.NewCachedNotificationRepo(postgresRepo, cacheRepo, logger, 10*time.Minute)
 
 	senders := map[string]sender.Sender{
 		"console":  sender.LoggingSender{Sender: sender.NewConsoleSender(os.Stdout), Logger: logger},
@@ -137,6 +151,9 @@ func main() {
 	router.Stop()
 
 	logger.Info("closing database")
+	if err := cacheRepo.Close(); err != nil {
+		logger.Error("closing cache repo failed", "error", err)
+	}
 	db.Close()
 
 	logger.Info("shutdown completed")

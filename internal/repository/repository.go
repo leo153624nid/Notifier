@@ -6,7 +6,7 @@ import (
 	"notifier/internal/domain"
 )
 
-type Repository interface {
+type NotificationRepo interface {
 	Save(ctx context.Context, n domain.Notification) (int, error)
 	GetAll(ctx context.Context) ([]domain.Notification, error)
 	GetList(ctx context.Context, page int, size int) ([]domain.Notification, error)

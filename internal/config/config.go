@@ -11,6 +11,7 @@ type Config struct {
 	LogLevel     string
 	APIkey       string
 	AuditLogPath string
+	RedisCfg     RedisConfig
 }
 
 func Load() (Config, error) {
@@ -19,6 +20,7 @@ func Load() (Config, error) {
 		DSN:          LoadPostgresConfig().DSN(),
 		LogLevel:     "info",
 		AuditLogPath: "audit.log",
+		RedisCfg:     LoadRedisConfig(),
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
@@ -38,4 +40,11 @@ func Load() (Config, error) {
 	cfg.APIkey = apiKey
 
 	return cfg, nil
+}
+
+func getEnv(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
+	}
+	return fallback
 }

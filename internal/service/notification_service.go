@@ -18,7 +18,7 @@ const sendTimeout = 2 * time.Second
 // NotificationService содержит бизнес-логику работы с уведомлениями:
 // валидацию, сохранение, асинхронную отправку через нужный канал и экспорт в аудит-лог.
 type NotificationService struct {
-	repo    repository.Repository
+	repo    repository.NotificationRepo
 	senders map[string]sender.Sender
 	audit   *audit.Logger
 	logger  *slog.Logger
@@ -26,7 +26,7 @@ type NotificationService struct {
 }
 
 func NewNotificationService(
-	repo repository.Repository,
+	repo repository.NotificationRepo,
 	senders map[string]sender.Sender,
 	auditLogger *audit.Logger,
 	logger *slog.Logger,

@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"net/url"
-	"os"
 )
 
 type PostgresConfig struct {
@@ -49,11 +48,4 @@ func LoadPostgresConfig() PostgresConfig {
 		DBName:   getEnv("PG_DBNAME", "notifier"),
 		SSLMode:  getEnv("PG_SSLMODE", "disable"),
 	}
-}
-
-func getEnv(key, fallback string) string {
-	if v, ok := os.LookupEnv(key); ok {
-		return v
-	}
-	return fallback
 }

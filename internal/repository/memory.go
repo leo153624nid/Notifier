@@ -23,6 +23,7 @@ func NewMemoryRepository() *MemoryRepository {
 	}
 }
 
+// MARK: - `NotificationRepo` interface implementation
 func (r *MemoryRepository) Save(_ context.Context, n domain.Notification) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
