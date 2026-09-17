@@ -47,6 +47,12 @@ services:
     volumes:
       - redis_data:/data
     restart: always
+    command: ["redis-server", "--requirepass", "${RD_PASSWORD:-notifier}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ... ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   notifier:
     build: .
@@ -58,6 +64,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     environment:
       PORT: ${PORT:-8080}
       API_KEY: ${API_KEY:-secret}
@@ -74,8 +82,8 @@ services:
       PG_DBNAME: ${PG_DBNAME:-notifier}
       PG_SSLMODE: ${PG_SSLMODE:-disable}
       # Redis
-      RD_HOST: ${RD_HOST:-localhost}
-      RD_PORT: ${RD_PORT:-6379}
+      RD_HOST: redis
+      RD_PORT: 6379
       RD_PASSWORD: ${RD_PASSWORD:-notifier}
     ports:
       - "${APP_HOST_PORT:-8080}:${PORT:-8080}"

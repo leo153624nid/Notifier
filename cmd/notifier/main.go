@@ -88,7 +88,7 @@ func main() {
 	cacheRepo := cache.NewRedisClient(cfg.RedisCfg.Addr, cfg.RedisCfg.Password)
 	_, errRedis := cacheRepo.Ping(ctxRedisInit).Result()
 	if errRedis != nil {
-		fmt.Fprintf(os.Stderr, "redis ping failed: %s\n", err)
+		fmt.Fprintf(os.Stderr, "redis ping failed: %s\n", errRedis)
 		logger.Error("redis ping failed", "error", errRedis)
 		os.Exit(1)
 	}

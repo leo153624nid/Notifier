@@ -43,7 +43,7 @@ func (r *CachedNotificationRepo) Save(ctx context.Context, n domain.Notification
 	}
 
 	if cacheErr := r.invalidateNotificationCache(ctx, id); cacheErr != nil {
-		r.logger.Warn("%s: invalidate: %w", op, cacheErr)
+		r.logger.Warn("invalidate cache", "op", op, "error", cacheErr)
 	}
 
 	return id, nil
@@ -80,7 +80,7 @@ func (r *CachedNotificationRepo) GetById(ctx context.Context, id int) (domain.No
 	if data, marshalErr := json.Marshal(n); marshalErr == nil {
 		setErr := r.redis.Set(ctx, key, data, r.ttl).Err()
 		if setErr != nil {
-			r.logger.Error("%s: set to cache: %w", op, setErr)
+			r.logger.Warn("set to cache", "op", op, "error", setErr)
 		}
 	}
 
@@ -95,7 +95,7 @@ func (r *CachedNotificationRepo) UpdateStatus(ctx context.Context, id int, statu
 	}
 
 	if cacheErr := r.invalidateNotificationCache(ctx, id); cacheErr != nil {
-		r.logger.Warn("%s: invalidate: %w", op, cacheErr)
+		r.logger.Warn("invalidate cache", "op", op, "error", cacheErr)
 	}
 
 	return nil
@@ -103,7 +103,7 @@ func (r *CachedNotificationRepo) UpdateStatus(ctx context.Context, id int, statu
 
 // MARK: - Support & Helpers
 func notificationCacheKey(id int) string {
-	return fmt.Sprintf("notification:%d", id)
+	return fmt.Sprintf("notifier:v1:notification:%d", id)
 }
 
 func (r *CachedNotificationRepo) invalidateNotificationCache(ctx context.Context, id int) error {
