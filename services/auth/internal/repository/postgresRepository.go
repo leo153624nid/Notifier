@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"uuid"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"authservice/internal/domain"
@@ -37,6 +39,11 @@ func (r *PostgresRepository) Create(ctx context.Context, u domain.User) (uuid.UU
 		u.Email, u.PasswordHash,
 	).Scan(&id)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return uuid.UUID{}, fmt.Errorf("%s: %w", op, domain.ErrUserExists)
+		}
+
 		return uuid.UUID{}, fmt.Errorf("%s: scan: %w", op, err)
 	}
 

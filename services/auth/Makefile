@@ -18,8 +18,9 @@ ENV_FILE ?= .env
 # запасные значения на случай, если $(ENV_FILE) отсутствует или не
 # задаёт переменную (например, на чистом чекауте без cp .env.example .env)
 PORT ?= 8081
-API_KEY ?= secret // TODO: delete ?
 LOG_LEVEL ?= info
+JWT_SECRET ?= devsecret
+JWT_TTL ?= 15m
 
 export
 
@@ -79,7 +80,7 @@ docker-down: ## остановить и удалить контейнеры
 	docker compose --env-file $(ENV_FILE) down
 
 docker-logs: ## смотреть логи сервиса
-	docker compose --env-file $(ENV_FILE) logs -f notifier
+	docker compose --env-file $(ENV_FILE) logs -f auth
 
 release: ## Собрать релизные бинарники в dist/
 	@mkdir -p dist
