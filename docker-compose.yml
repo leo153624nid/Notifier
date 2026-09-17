@@ -49,7 +49,7 @@ services:
     restart: always
     command: ["redis-server", "--requirepass", "${RD_PASSWORD:-notifier}"]
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a ... ping"]
+      test: ["CMD-SHELL", "redis-cli -a ${RD_PASSWORD:-notifier} --no-auth-warning ping"]
       interval: 5s
       timeout: 5s
       retries: 5

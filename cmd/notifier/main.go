@@ -85,15 +85,20 @@ func main() {
 	ctxRedisInit, cancelRedisInit := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelRedisInit()
 
-	cacheRepo := cache.NewRedisClient(cfg.RedisCfg.Addr, cfg.RedisCfg.Password)
+	cacheRepo := cache.NewRedisClient(
+		cfg.RedisCfg.Addr,
+		cfg.RedisCfg.Password,
+		100*time.Millisecond, // dial
+		100*time.Millisecond, // read
+		100*time.Millisecond, // write
+	)
 	_, errRedis := cacheRepo.Ping(ctxRedisInit).Result()
 	if errRedis != nil {
 		fmt.Fprintf(os.Stderr, "redis ping failed: %s\n", errRedis)
 		logger.Error("redis ping failed", "error", errRedis)
-		os.Exit(1)
 	}
 
-	repo := repository.NewCachedNotificationRepo(postgresRepo, cacheRepo, logger, 10*time.Minute)
+	repo := repository.NewCachedNotificationRepo(postgresRepo, cacheRepo, logger, 30*time.Second)
 
 	senders := map[string]sender.Sender{
 		"console":  sender.LoggingSender{Sender: sender.NewConsoleSender(os.Stdout), Logger: logger},
@@ -108,7 +113,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "service: %s\n", err)
 		os.Exit(1)
 	}
-	healthService := service.NewHealthService(db)
+	healthService := service.NewHealthService(db, cache.NewPinger(cacheRepo))
 
 	handler := transporthttp.NewHandler(notificationService, healthService, logger, appName, appVersion)
 	router := transporthttp.NewRouter(handler, cfg.APIkey, logger)

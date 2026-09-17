@@ -8,13 +8,21 @@ type Pinger interface {
 }
 
 type HealthService struct {
-	pinger Pinger
+	pingerDB    Pinger
+	pingerCache Pinger
 }
 
-func NewHealthService(pinger Pinger) *HealthService {
-	return &HealthService{pinger: pinger}
+func NewHealthService(pingerDB, pingerCache Pinger) *HealthService {
+	return &HealthService{
+		pingerDB:    pingerDB,
+		pingerCache: pingerCache,
+	}
 }
 
-func (h *HealthService) Check(ctx context.Context) error {
-	return h.pinger.Ping(ctx)
+func (h *HealthService) CheckDB(ctx context.Context) error {
+	return h.pingerDB.Ping(ctx)
+}
+
+func (h *HealthService) CheckCache(ctx context.Context) error {
+	return h.pingerCache.Ping(ctx)
 }

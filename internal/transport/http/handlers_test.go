@@ -19,18 +19,27 @@ import (
 	"notifier/internal/service"
 )
 
-type fakePinger struct {
+type fakeDbPinger struct {
 	err error
 }
 
-func (f fakePinger) Ping(context.Context) error {
+type fakeCachePinger struct {
+	err error
+}
+
+func (f fakeDbPinger) Ping(context.Context) error {
+	return f.err
+}
+
+func (f fakeCachePinger) Ping(context.Context) error {
 	return f.err
 }
 
 func newTestHandler(
 	t *testing.T,
 	senders map[string]sender.Sender,
-	pinger service.Pinger,
+	pingerDB service.Pinger,
+	pingerCache service.Pinger,
 ) (*Handler, *repository.MemoryRepository) {
 	t.Helper()
 
@@ -42,7 +51,7 @@ func newTestHandler(
 	if err != nil {
 		t.Fatalf("NewNotificationService() error: %s", err)
 	}
-	healthService := service.NewHealthService(pinger)
+	healthService := service.NewHealthService(pingerDB, pingerCache)
 
 	return NewHandler(notificationService, healthService, logger, "Notifier", "test"), repo
 }
@@ -51,7 +60,8 @@ func TestHealthHandler(t *testing.T) {
 	h, _ := newTestHandler(
 		t,
 		map[string]sender.Sender{"console": &sender.MockSender{}},
-		fakePinger{},
+		fakeDbPinger{},
+		fakeCachePinger{},
 	)
 
 	r := httptest.NewRequest("GET", "/health", nil)
@@ -71,7 +81,26 @@ func TestHealthHandler_DBUnavailable(t *testing.T) {
 	h, _ := newTestHandler(
 		t,
 		map[string]sender.Sender{"console": &sender.MockSender{}},
-		fakePinger{err: errors.New("connection refused")},
+		fakeDbPinger{err: errors.New("connection refused")},
+		fakeCachePinger{},
+	)
+
+	r := httptest.NewRequest("GET", "/health", nil)
+	w := httptest.NewRecorder()
+
+	h.healthHandler(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestHealthHandler_CacheUnavailable(t *testing.T) {
+	h, _ := newTestHandler(
+		t,
+		map[string]sender.Sender{"console": &sender.MockSender{}},
+		fakeDbPinger{},
+		fakeCachePinger{err: errors.New("connection refused")},
 	)
 
 	r := httptest.NewRequest("GET", "/health", nil)
@@ -120,7 +149,12 @@ func TestCreateNotification(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &sender.MockSender{}
-			h, _ := newTestHandler(t, map[string]sender.Sender{"email": mock}, fakePinger{})
+			h, _ := newTestHandler(
+				t,
+				map[string]sender.Sender{"email": mock},
+				fakeDbPinger{},
+				fakeCachePinger{},
+			)
 
 			r := httptest.NewRequest("POST", "/api/v1/notifications", strings.NewReader(tt.body))
 			w := httptest.NewRecorder()
@@ -169,7 +203,12 @@ func TestGetNotification(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &sender.MockSender{}
-			h, repo := newTestHandler(t, map[string]sender.Sender{"email": mock}, fakePinger{})
+			h, repo := newTestHandler(
+				t,
+				map[string]sender.Sender{"email": mock},
+				fakeDbPinger{},
+				fakeCachePinger{},
+			)
 
 			_, err := repo.Save(context.Background(), notificationFixture())
 			if err != nil {
@@ -216,7 +255,12 @@ func TestListNotifications(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &sender.MockSender{}
-			h, repo := newTestHandler(t, map[string]sender.Sender{"email": mock}, fakePinger{})
+			h, repo := newTestHandler(
+				t,
+				map[string]sender.Sender{"email": mock},
+				fakeDbPinger{},
+				fakeCachePinger{},
+			)
 
 			for _, v := range tt.ids {
 				n := notificationFixture()

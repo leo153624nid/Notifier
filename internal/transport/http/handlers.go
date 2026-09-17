@@ -41,13 +41,23 @@ func NewHandler(
 func (h *Handler) healthHandler(w http.ResponseWriter, r *http.Request) {
 	const op = "Handler.health"
 
-	ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
-	defer cancel()
+	ctxDB, cancelDB := context.WithTimeout(r.Context(), 1*time.Second)
+	defer cancelDB()
 
-	if err := h.health.Check(ctx); err != nil {
-		h.logger.Error("health check failed", "op", op, "error", err)
+	if err := h.health.CheckDB(ctxDB); err != nil {
+		h.logger.Error("db health check failed", "op", op, "error", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "service unavailable", "error": err.Error()})
+		return
+	}
+
+	ctxCache, cancelCache := context.WithTimeout(r.Context(), 1*time.Second)
+	defer cancelCache()
+
+	if err := h.health.CheckCache(ctxCache); err != nil {
+		h.logger.Error("cache health check failed", "op", op, "error", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "cache unavailable", "error": err.Error()})
 		return
 	}
 
