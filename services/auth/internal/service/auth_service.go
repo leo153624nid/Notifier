@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"authservice/internal/repository"
 )
 
@@ -29,4 +31,13 @@ func NewAuthService(
 		repo:   repo,
 		logger: logger,
 	}, nil
+}
+
+func passwordToHash(password string) ([]byte, error) {
+	return bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+}
+
+func compareHashAndPassword(hash string, password string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }
