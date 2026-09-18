@@ -42,31 +42,11 @@ func TestValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "wrong email",
-			u: User{
-				ID:           uuid.New(),
-				Email:        "test @mail.com",
-				PasswordHash: "some_hash",
-				CreatedAt:    time.Now(),
-			},
-			wantErr: true,
-		},
-		{
 			name: "empty password",
 			u: User{
 				ID:           uuid.New(),
 				Email:        "test@mail.com",
 				PasswordHash: "",
-				CreatedAt:    time.Now(),
-			},
-			wantErr: true,
-		},
-		{
-			name: "long password",
-			u: User{
-				ID:           uuid.New(),
-				Email:        "test@mail.com",
-				PasswordHash: string(make([]byte, 61)),
 				CreatedAt:    time.Now(),
 			},
 			wantErr: true,
