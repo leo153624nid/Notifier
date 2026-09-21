@@ -79,7 +79,7 @@ func compareHashAndPassword(hash string, password string) bool {
 	return err == nil
 }
 
-func hashToken(tok string) string {
+func hashRefreshToken(tok string) string {
 	sum := sha256.Sum256([]byte(tok))
 	return hex.EncodeToString(sum[:])
 }
@@ -196,7 +196,7 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (TokenPa
 		return TokenPair{}, domain.ErrInvalidToken
 	}
 
-	hash := hashToken(refreshToken)
+	hash := hashRefreshToken(refreshToken)
 
 	stored, err := s.repo.GetRefreshToken(ctx, hash)
 	if err != nil {
@@ -233,7 +233,7 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 		return domain.ErrInvalidToken
 	}
 
-	if err := s.repo.RevokeRefreshToken(ctx, hashToken(refreshToken)); err != nil {
+	if err := s.repo.RevokeRefreshToken(ctx, hashRefreshToken(refreshToken)); err != nil {
 		s.logger.Error("revoke refresh token failed", "op", op, "error", err)
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -257,7 +257,7 @@ func (s *AuthService) issueTokenPair(ctx context.Context, userID uuid.UUID) (Tok
 	rt := domain.RefreshToken{
 		ID:        uuid.New(),
 		UserID:    userID,
-		TokenHash: hashToken(refresh),
+		TokenHash: hashRefreshToken(refresh),
 		ExpiresAt: time.Now().Add(s.jwtRefreshTTL),
 		CreatedAt: time.Now(),
 	}
@@ -265,5 +265,8 @@ func (s *AuthService) issueTokenPair(ctx context.Context, userID uuid.UUID) (Tok
 		return TokenPair{}, fmt.Errorf("%s: create refresh token: %w", op, err)
 	}
 
-	return TokenPair{AccessToken: access, RefreshToken: refresh}, nil
+	return TokenPair{
+		AccessToken:  access,
+		RefreshToken: refresh,
+	}, nil
 }
