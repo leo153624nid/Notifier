@@ -46,7 +46,7 @@ func newTestHandler(
 	repo := newMockMemoryRepository(existEmail)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	auth, err := service.NewAuthService(repo, logger, "secret", 10*time.Minute)
+	auth, err := service.NewAuthService(repo, logger, "secret", 10*time.Minute, 24*time.Hour)
 	if err != nil {
 		t.Fatalf("NewAuthService() error: %s", err)
 	}
@@ -240,13 +240,107 @@ func TestLoginUser(t *testing.T) {
 				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)
 			} else {
 				if w.Code == http.StatusOK {
-					var res LoginResponse
+					var res TokenResponse
 					_ = json.NewDecoder(w.Body).Decode(&res)
 					if len(res.AccessToken) == 0 {
-						t.Errorf("token is empty")
+						t.Errorf("access token is empty")
+					}
+					if len(res.RefreshToken) == 0 {
+						t.Errorf("refresh token is empty")
 					}
 				}
 			}
 		})
 	}
+}
+
+func TestRefreshAndLogout(t *testing.T) {
+	existEmail := "exist3@mail.com"
+	existPassword := "12345678"
+
+	h, _ := newTestHandler(t, fakeDbPinger{})
+
+	rReg := httptest.NewRequest(
+		"POST",
+		"/api/v1/auth/register",
+		strings.NewReader(fmt.Sprintf(`{"email":"%s","password":"%s"}`, existEmail, existPassword)))
+	wReg := httptest.NewRecorder()
+	h.registerUser(wReg, rReg)
+	if wReg.Code != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d", wReg.Code, http.StatusCreated)
+	}
+
+	rLogin := httptest.NewRequest(
+		"POST",
+		"/api/v1/auth/login",
+		strings.NewReader(fmt.Sprintf(`{"email":"%s","password":"%s"}`, existEmail, existPassword)))
+	wLogin := httptest.NewRecorder()
+	h.loginUser(wLogin, rLogin)
+	if wLogin.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want %d", wLogin.Code, http.StatusOK)
+	}
+
+	var loginRes TokenResponse
+	if err := json.NewDecoder(wLogin.Body).Decode(&loginRes); err != nil {
+		t.Fatalf("decode login response: %s", err)
+	}
+
+	t.Run("refresh with invalid token", func(t *testing.T) {
+		r := httptest.NewRequest("POST", "/api/v1/auth/refresh", strings.NewReader(`{"refresh_token":"garbage"}`))
+		w := httptest.NewRecorder()
+
+		h.refreshToken(w, r)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("refresh with valid token", func(t *testing.T) {
+		body, _ := json.Marshal(RefreshRequest{RefreshToken: loginRes.RefreshToken})
+		r := httptest.NewRequest("POST", "/api/v1/auth/refresh", strings.NewReader(string(body)))
+		w := httptest.NewRecorder()
+
+		h.refreshToken(w, r)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+
+		var res TokenResponse
+		_ = json.NewDecoder(w.Body).Decode(&res)
+		if len(res.AccessToken) == 0 || len(res.RefreshToken) == 0 {
+			t.Errorf("expected non-empty token pair")
+		}
+		if res.RefreshToken == loginRes.RefreshToken {
+			t.Errorf("refresh token wasn't rotated")
+		}
+
+		// использованный refresh-токен из логина больше не годится
+		body2, _ := json.Marshal(RefreshRequest{RefreshToken: loginRes.RefreshToken})
+		r2 := httptest.NewRequest("POST", "/api/v1/auth/refresh", strings.NewReader(string(body2)))
+		w2 := httptest.NewRecorder()
+		h.refreshToken(w2, r2)
+		if w2.Code != http.StatusUnauthorized {
+			t.Errorf("reuse status = %d, want %d", w2.Code, http.StatusUnauthorized)
+		}
+
+		t.Run("logout revokes new refresh token", func(t *testing.T) {
+			body3, _ := json.Marshal(RefreshRequest{RefreshToken: res.RefreshToken})
+			r3 := httptest.NewRequest("POST", "/api/v1/auth/logout", strings.NewReader(string(body3)))
+			w3 := httptest.NewRecorder()
+			h.logoutUser(w3, r3)
+			if w3.Code != http.StatusNoContent {
+				t.Fatalf("logout status = %d, want %d", w3.Code, http.StatusNoContent)
+			}
+
+			body4, _ := json.Marshal(RefreshRequest{RefreshToken: res.RefreshToken})
+			r4 := httptest.NewRequest("POST", "/api/v1/auth/refresh", strings.NewReader(string(body4)))
+			w4 := httptest.NewRecorder()
+			h.refreshToken(w4, r4)
+			if w4.Code != http.StatusUnauthorized {
+				t.Errorf("refresh after logout status = %d, want %d", w4.Code, http.StatusUnauthorized)
+			}
+		})
+	})
 }

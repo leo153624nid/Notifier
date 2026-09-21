@@ -7,19 +7,21 @@ import (
 )
 
 type Config struct {
-	Port      string
-	DSN       string
-	LogLevel  string
-	JWTSecret string
-	JWTTTL    time.Duration
+	Port          string
+	DSN           string
+	LogLevel      string
+	JWTSecret     string
+	JWTAccessTTL  time.Duration
+	JWTRefreshTTL time.Duration
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		Port:     ":8081",
-		DSN:      LoadPostgresConfig().DSN(),
-		LogLevel: "info",
-		JWTTTL:   15 * time.Minute,
+		Port:          ":8081",
+		DSN:           LoadPostgresConfig().DSN(),
+		LogLevel:      "info",
+		JWTAccessTTL:  15 * time.Minute,
+		JWTRefreshTTL: 30 * 24 * time.Hour,
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
@@ -28,12 +30,19 @@ func Load() (Config, error) {
 	if v := os.Getenv("LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
 	}
-	if v := os.Getenv("JWT_TTL"); v != "" {
+	if v := os.Getenv("JWT_ACCESS_TTL"); v != "" {
 		ttl, err := time.ParseDuration(v)
 		if err != nil {
-			return Config{}, fmt.Errorf("config: invalid JWT_TTL: %w", err)
+			return Config{}, fmt.Errorf("config: invalid JWT_ACCESS_TTL: %w", err)
 		}
-		cfg.JWTTTL = ttl
+		cfg.JWTAccessTTL = ttl
+	}
+	if v := os.Getenv("JWT_REFRESH_TTL"); v != "" {
+		ttl, err := time.ParseDuration(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: invalid JWT_REFRESH_TTL: %w", err)
+		}
+		cfg.JWTRefreshTTL = ttl
 	}
 
 	secret, ok := os.LookupEnv("JWT_SECRET")

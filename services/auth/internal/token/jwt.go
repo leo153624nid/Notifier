@@ -8,13 +8,21 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type Type string
+
+const (
+	TypeAccess  Type = "access"
+	TypeRefresh Type = "refresh"
+)
+
 type Claims struct {
 	jwt.RegisteredClaims
+	Type   Type      `json:"type"`
 	UserID uuid.UUID `json:"sub"`
 }
 
-func Issue(userID uuid.UUID, secret string, ttl time.Duration) (string, error) {
-	const op = "Token.Issue"
+func issue(userID uuid.UUID, secret string, ttl time.Duration, typ Type) (string, error) {
+	const op = "Token.issue"
 
 	if userID == uuid.Nil() {
 		return "", fmt.Errorf("%s: wrong user ID", op)
@@ -29,7 +37,9 @@ func Issue(userID uuid.UUID, secret string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		UserID: userID,
+		Type:   typ,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 		},
@@ -37,6 +47,16 @@ func Issue(userID uuid.UUID, secret string, ttl time.Duration) (string, error) {
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	return tok.SignedString([]byte(secret))
+}
+
+// IssueAccess выпускает короткоживущий токен для авторизации запросов.
+func IssueAccess(userID uuid.UUID, secret string, ttl time.Duration) (string, error) {
+	return issue(userID, secret, ttl, TypeAccess)
+}
+
+// IssueRefresh выпускает долгоживущий токен для обновления access-токена.
+func IssueRefresh(userID uuid.UUID, secret string, ttl time.Duration) (string, error) {
+	return issue(userID, secret, ttl, TypeRefresh)
 }
 
 func Parse(tokenString, secret string) (Claims, error) {

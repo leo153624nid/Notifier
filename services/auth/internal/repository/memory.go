@@ -4,19 +4,22 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 	"uuid"
 
 	"authservice/internal/domain"
 )
 
 type MemoryRepository struct {
-	users map[string]domain.User
-	mu    sync.Mutex
+	users         map[string]domain.User
+	refreshTokens map[string]domain.RefreshToken // key: token hash
+	mu            sync.Mutex
 }
 
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
-		users: make(map[string]domain.User),
+		users:         make(map[string]domain.User),
+		refreshTokens: make(map[string]domain.RefreshToken),
 	}
 }
 
@@ -52,4 +55,43 @@ func (r *MemoryRepository) GetByEmail(_ context.Context, email string) (domain.U
 	}
 
 	return u, nil
+}
+
+func (r *MemoryRepository) CreateRefreshToken(_ context.Context, rt domain.RefreshToken) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.refreshTokens[rt.TokenHash] = rt
+
+	return nil
+}
+
+func (r *MemoryRepository) GetRefreshToken(_ context.Context, tokenHash string) (domain.RefreshToken, error) {
+	const op = "MemoryRepository.GetRefreshToken"
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	rt, ok := r.refreshTokens[tokenHash]
+	if !ok {
+		return domain.RefreshToken{}, fmt.Errorf("%s: %w", op, domain.ErrInvalidToken)
+	}
+
+	return rt, nil
+}
+
+func (r *MemoryRepository) RevokeRefreshToken(_ context.Context, tokenHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	rt, ok := r.refreshTokens[tokenHash]
+	if !ok {
+		return nil // idempotent: уже отозван либо никогда не существовал
+	}
+
+	now := time.Now()
+	rt.RevokedAt = &now
+	r.refreshTokens[tokenHash] = rt
+
+	return nil
 }

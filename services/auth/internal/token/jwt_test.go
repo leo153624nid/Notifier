@@ -14,7 +14,7 @@ func checkPrefixSuffix(str, substr string) bool {
 }
 
 //nolint:govet
-func TestIssue(t *testing.T) {
+func TestIssueAccess(t *testing.T) {
 	tests := []struct {
 		name    string
 		id      uuid.UUID
@@ -54,10 +54,10 @@ func TestIssue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tok, err := Issue(tt.id, tt.secret, tt.ttl)
+			tok, err := IssueAccess(tt.id, tt.secret, tt.ttl)
 
 			if err != nil && !tt.wantErr {
-				t.Errorf("Issue() error: %s", err)
+				t.Errorf("IssueAccess() error: %s", err)
 			}
 			if err == nil && tt.wantErr {
 				t.Errorf("err is nil, want error")
@@ -76,11 +76,39 @@ func TestIssue(t *testing.T) {
 				if claims.UserID != tt.id {
 					t.Errorf("wrong ID, want: %s, got: %s", tt.id, claims.UserID)
 				}
+				if claims.Type != TypeAccess {
+					t.Errorf("wrong type, want: %s, got: %s", TypeAccess, claims.Type)
+				}
 				if claims.ExpiresAt.Before(time.Now()) {
 					t.Errorf("token is expired")
 				}
 			}
 		})
+	}
+}
+
+func TestIssueRefresh(t *testing.T) {
+	id := uuid.New()
+	secret := "secret"
+	ttl := 30 * 24 * time.Hour
+
+	tok, err := IssueRefresh(id, secret, ttl)
+	if err != nil {
+		t.Fatalf("IssueRefresh() error: %s", err)
+	}
+	if utf8.RuneCountInString(tok) == 0 {
+		t.Fatalf("token is empty")
+	}
+
+	claims, err := Parse(tok, secret)
+	if err != nil {
+		t.Fatalf("Parse() error: %s", err)
+	}
+	if claims.UserID != id {
+		t.Errorf("wrong ID, want: %s, got: %s", id, claims.UserID)
+	}
+	if claims.Type != TypeRefresh {
+		t.Errorf("wrong type, want: %s, got: %s", TypeRefresh, claims.Type)
 	}
 }
 
@@ -92,6 +120,7 @@ func TestParse(t *testing.T) {
 	expiredTime := time.Now().Add(-1 * time.Hour) // Время в прошлом
 	expiredClaims := Claims{
 		UserID: userID,
+		Type:   TypeAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(expiredTime.Add(-15 * time.Minute)),
 			ExpiresAt: jwt.NewNumericDate(expiredTime),
@@ -102,6 +131,7 @@ func TestParse(t *testing.T) {
 	// 2. Готовим токен с правильным временем, но подписанный другим секретом (битая подпись)
 	validClaims := Claims{
 		UserID: userID,
+		Type:   TypeAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),

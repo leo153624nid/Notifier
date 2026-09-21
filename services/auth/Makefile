@@ -20,7 +20,8 @@ ENV_FILE ?= .env
 PORT ?= 8081
 LOG_LEVEL ?= info
 JWT_SECRET ?= devsecret
-JWT_TTL ?= 15m
+JWT_ACCESS_TTL ?= 15m
+JWT_REFRESH_TTL ?= 720h
 
 export
 

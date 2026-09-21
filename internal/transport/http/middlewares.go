@@ -156,11 +156,18 @@ type userIDKeyType struct{}
 
 var userIDKey = userIDKeyType{}
 
+// accessTokenType — значение claim'а "type" у access-токенов, которые
+// выпускает auth-сервис (см. services/auth/internal/token.TypeAccess).
+// Refresh-токены (TypeRefresh) сюда предъявлять нельзя — они предназначены
+// только для эндпоинта POST /api/v1/auth/refresh самого auth-сервиса.
+const accessTokenType = "access"
+
 // jwtClaims — формат токена, который выдаёт auth-сервис (см.
 // services/auth/internal/token.Claims). Notifier только проверяет подпись
 // и вычитывает userID, сам токены не выпускает.
 type jwtClaims struct {
 	jwt.RegisteredClaims
+	Type   string    `json:"type"`
 	UserID uuid.UUID `json:"sub"`
 }
 
@@ -202,6 +209,9 @@ func parseUserID(tokenString, secret string) (uuid.UUID, error) {
 	}
 	if !tok.Valid {
 		return uuid.UUID{}, fmt.Errorf("parse token: invalid token")
+	}
+	if claims.Type != accessTokenType {
+		return uuid.UUID{}, fmt.Errorf("parse token: wrong token type")
 	}
 
 	return claims.UserID, nil

@@ -102,7 +102,7 @@ func (h *Handler) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tok, err := h.auth.Login(r.Context(), req.Email, req.Password)
+	pair, err := h.auth.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidCredentials):
@@ -114,7 +114,7 @@ func (h *Handler) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	js, err := json.Marshal(toLoginResponse(tok))
+	js, err := json.Marshal(toTokenResponse(pair))
 	if err != nil {
 		h.logger.Error("marshal failed", "op", op, "error", err)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
@@ -123,4 +123,59 @@ func (h *Handler) loginUser(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(js)
+}
+
+func (h *Handler) refreshToken(w http.ResponseWriter, r *http.Request) {
+	const op = "Handler.refreshToken"
+
+	var req RefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		SendJSONError(w, "invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	pair, err := h.auth.Refresh(r.Context(), req.RefreshToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidToken):
+			SendJSONError(w, "invalid or expired refresh token", http.StatusUnauthorized)
+		default:
+			h.logger.Error("refresh token failed", "op", op, "error", err)
+			SendJSONError(w, "internal error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	js, err := json.Marshal(toTokenResponse(pair))
+	if err != nil {
+		h.logger.Error("marshal failed", "op", op, "error", err)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(js)
+}
+
+func (h *Handler) logoutUser(w http.ResponseWriter, r *http.Request) {
+	const op = "Handler.logoutUser"
+
+	var req RefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		SendJSONError(w, "invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.auth.Logout(r.Context(), req.RefreshToken); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidToken):
+			SendJSONError(w, "invalid refresh token", http.StatusBadRequest)
+		default:
+			h.logger.Error("logout user failed", "op", op, "error", err)
+			SendJSONError(w, "internal error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

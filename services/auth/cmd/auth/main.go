@@ -79,7 +79,7 @@ func main() {
 
 	repo := repository.NewPostgresRepository(db, logger)
 
-	authService, err := service.NewAuthService(repo, logger, cfg.JWTSecret, cfg.JWTTTL)
+	authService, err := service.NewAuthService(repo, logger, cfg.JWTSecret, cfg.JWTAccessTTL, cfg.JWTRefreshTTL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "service: %s\n", err)
 		os.Exit(1)

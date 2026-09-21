@@ -22,6 +22,8 @@ func NewRouter(h *Handler, logger *slog.Logger) *Router {
 	mux.HandleFunc("GET /health", h.healthHandler)
 	mux.Handle("POST /api/v1/auth/register", rateLimit(http.HandlerFunc(h.registerUser)))
 	mux.Handle("POST /api/v1/auth/login", rateLimit(http.HandlerFunc(h.loginUser)))
+	mux.Handle("POST /api/v1/auth/refresh", rateLimit(http.HandlerFunc(h.refreshToken)))
+	mux.Handle("POST /api/v1/auth/logout", rateLimit(http.HandlerFunc(h.logoutUser)))
 
 	handler := requestID(loggingMiddleware(logger)(contentType(mux)))
 

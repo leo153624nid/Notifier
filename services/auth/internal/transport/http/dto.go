@@ -3,6 +3,8 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+
+	"authservice/internal/service"
 )
 
 type APIError struct {
@@ -16,9 +18,16 @@ type UserRequest struct {
 	Password string `json:"password"`
 }
 
-type LoginResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
+// RefreshRequest — тело запроса POST /api/v1/auth/refresh и POST /api/v1/auth/logout
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// TokenResponse — тело ответа при логине и обновлении токенов
+type TokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
 }
 
 type HealthResponse struct {
@@ -34,9 +43,10 @@ func SendJSONError(w http.ResponseWriter, message string, status int) {
 	_ = json.NewEncoder(w).Encode(APIError{Error: message})
 }
 
-func toLoginResponse(token string) LoginResponse {
-	return LoginResponse{
-		AccessToken: token,
-		TokenType:   "Bearer",
+func toTokenResponse(pair service.TokenPair) TokenResponse {
+	return TokenResponse{
+		AccessToken:  pair.AccessToken,
+		RefreshToken: pair.RefreshToken,
+		TokenType:    "Bearer",
 	}
 }

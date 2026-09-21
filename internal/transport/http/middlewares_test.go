@@ -142,8 +142,15 @@ func TestClientIP(t *testing.T) {
 func newTestToken(t *testing.T, userID uuid.UUID, secret string, ttl time.Duration) string {
 	t.Helper()
 
+	return newTestTokenWithType(t, userID, secret, ttl, accessTokenType)
+}
+
+func newTestTokenWithType(t *testing.T, userID uuid.UUID, secret string, ttl time.Duration, typ string) string {
+	t.Helper()
+
 	claims := jwtClaims{
 		UserID: userID,
+		Type:   typ,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
@@ -207,6 +214,7 @@ func TestAuthMiddleware_Rejects(t *testing.T) {
 		{"wrong secret", "Bearer " + newTestToken(t, uuid.New(), "wrong-secret", time.Minute)},
 		{"expired token", "Bearer " + newTestToken(t, uuid.New(), secret, -time.Minute)},
 		{"garbage token", "Bearer not.a.jwt"},
+		{"refresh token used as access", "Bearer " + newTestTokenWithType(t, uuid.New(), secret, time.Minute, "refresh")},
 	}
 
 	for _, tt := range tests {

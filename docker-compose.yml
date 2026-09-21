@@ -150,7 +150,8 @@ services:
       PORT: ${AUTH_PORT:-8081}
       LOG_LEVEL: ${AUTH_LOG_LEVEL:-info}
       JWT_SECRET: ${JWT_SECRET:-devsecret}
-      JWT_TTL: ${JWT_TTL:-15m}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-720h}
       # Внутри docker-сети адрес БД всегда postgres_auth:5432 — см. комментарий
       # к аналогичным переменным сервиса notifier выше.
       PG_HOST: postgres_auth

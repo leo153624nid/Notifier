@@ -56,7 +56,7 @@ func (r *PostgresRepository) GetByEmail(ctx context.Context, email string) (doma
 	var u domain.User
 	err := r.db.QueryRow(
 		ctx,
-		`SELECT 
+		`SELECT
 		id, email, password_hash, created_at
 		FROM users WHERE email=$1`,
 		email,
@@ -70,4 +70,56 @@ func (r *PostgresRepository) GetByEmail(ctx context.Context, email string) (doma
 	}
 
 	return u, nil
+}
+
+func (r *PostgresRepository) CreateRefreshToken(ctx context.Context, rt domain.RefreshToken) error {
+	const op = "PostgresRepository.CreateRefreshToken"
+
+	_, err := r.db.Exec(
+		ctx,
+		`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3, $4)`,
+		rt.ID, rt.UserID, rt.TokenHash, rt.ExpiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+func (r *PostgresRepository) GetRefreshToken(ctx context.Context, tokenHash string) (domain.RefreshToken, error) {
+	const op = "PostgresRepository.GetRefreshToken"
+
+	var rt domain.RefreshToken
+	err := r.db.QueryRow(
+		ctx,
+		`SELECT id, user_id, token_hash, expires_at, created_at, revoked_at
+		FROM refresh_tokens WHERE token_hash=$1`,
+		tokenHash,
+	).Scan(&rt.ID, &rt.UserID, &rt.TokenHash, &rt.ExpiresAt, &rt.CreatedAt, &rt.RevokedAt)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.RefreshToken{}, fmt.Errorf("%s: scan: %w", op, domain.ErrInvalidToken)
+	}
+	if err != nil {
+		return domain.RefreshToken{}, fmt.Errorf("%s: scan: %w", op, err)
+	}
+
+	return rt, nil
+}
+
+func (r *PostgresRepository) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
+	const op = "PostgresRepository.RevokeRefreshToken"
+
+	_, err := r.db.Exec(
+		ctx,
+		`UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash=$1 AND revoked_at IS NULL`,
+		tokenHash,
+	)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
 }

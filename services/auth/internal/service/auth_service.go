@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,18 +20,28 @@ import (
 	"authservice/internal/token"
 )
 
+// TokenPair — пара токенов, выдаваемая при логине и обновлении сессии.
+// AccessToken живёт недолго и используется для авторизации запросов,
+// RefreshToken — долго и используется только для получения новой пары.
+type TokenPair struct {
+	AccessToken  string
+	RefreshToken string
+}
+
 type AuthService struct {
-	repo      repository.UserRepo
-	logger    *slog.Logger
-	jwtSecret string
-	jwtTTL    time.Duration
+	repo          repository.UserRepo
+	logger        *slog.Logger
+	jwtSecret     string
+	jwtAccessTTL  time.Duration
+	jwtRefreshTTL time.Duration
 }
 
 func NewAuthService(
 	repo repository.UserRepo,
 	logger *slog.Logger,
 	jwtSecret string,
-	jwtTTL time.Duration,
+	jwtAccessTTL time.Duration,
+	jwtRefreshTTL time.Duration,
 ) (*AuthService, error) {
 	const op = "NewAuthService"
 
@@ -42,15 +54,19 @@ func NewAuthService(
 	if jwtSecret == "" {
 		return nil, fmt.Errorf("%s: jwt secret is required", op)
 	}
-	if jwtTTL == 0 {
-		return nil, fmt.Errorf("%s: jwt ttl is required", op)
+	if jwtAccessTTL == 0 {
+		return nil, fmt.Errorf("%s: jwt access ttl is required", op)
+	}
+	if jwtRefreshTTL == 0 {
+		return nil, fmt.Errorf("%s: jwt refresh ttl is required", op)
 	}
 
 	return &AuthService{
-		repo:      repo,
-		logger:    logger,
-		jwtSecret: jwtSecret,
-		jwtTTL:    jwtTTL,
+		repo:          repo,
+		logger:        logger,
+		jwtSecret:     jwtSecret,
+		jwtAccessTTL:  jwtAccessTTL,
+		jwtRefreshTTL: jwtRefreshTTL,
 	}, nil
 }
 
@@ -61,6 +77,11 @@ func passwordToHash(password string) ([]byte, error) {
 func compareHashAndPassword(hash string, password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
+}
+
+func hashToken(tok string) string {
+	sum := sha256.Sum256([]byte(tok))
+	return hex.EncodeToString(sum[:])
 }
 
 func emailIsValid(e string) bool {
@@ -127,32 +148,122 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (dom
 	return u, nil
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (string, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string) (TokenPair, error) {
 	const op = "AuthService.Login"
 
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !emailIsValid(email) {
-		return "", domain.ErrInvalidCredentials
+		return TokenPair{}, domain.ErrInvalidCredentials
 	}
 
 	u, err := s.repo.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidCredentials) {
-			return "", domain.ErrInvalidCredentials
+			return TokenPair{}, domain.ErrInvalidCredentials
 		}
 		s.logger.Error("get by email failed", "op", op, "error", err)
-		return "", err
+		return TokenPair{}, err
 	}
 
 	if !compareHashAndPassword(u.PasswordHash, password) {
-		return "", domain.ErrInvalidCredentials
+		return TokenPair{}, domain.ErrInvalidCredentials
 	}
 
-	tok, err := token.Issue(u.ID, s.jwtSecret, s.jwtTTL)
+	pair, err := s.issueTokenPair(ctx, u.ID)
 	if err != nil {
 		s.logger.Error("token failed", "op", op, "error", err)
-		return "", err
+		return TokenPair{}, err
 	}
 
-	return tok, nil
+	return pair, nil
+}
+
+// Refresh обменивает действующий refresh-токен на новую пару токенов.
+// Использованный refresh-токен сразу отзывается (ротация) — повторное
+// его предъявление больше не сработает.
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (TokenPair, error) {
+	const op = "AuthService.Refresh"
+
+	if refreshToken == "" {
+		return TokenPair{}, domain.ErrInvalidToken
+	}
+
+	claims, err := token.Parse(refreshToken, s.jwtSecret)
+	if err != nil {
+		return TokenPair{}, domain.ErrInvalidToken
+	}
+	if claims.Type != token.TypeRefresh {
+		return TokenPair{}, domain.ErrInvalidToken
+	}
+
+	hash := hashToken(refreshToken)
+
+	stored, err := s.repo.GetRefreshToken(ctx, hash)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidToken) {
+			return TokenPair{}, domain.ErrInvalidToken
+		}
+		s.logger.Error("get refresh token failed", "op", op, "error", err)
+		return TokenPair{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if !stored.IsActive() {
+		return TokenPair{}, domain.ErrInvalidToken
+	}
+
+	if revokeErr := s.repo.RevokeRefreshToken(ctx, hash); revokeErr != nil {
+		s.logger.Error("revoke refresh token failed", "op", op, "error", revokeErr)
+		return TokenPair{}, fmt.Errorf("%s: %w", op, revokeErr)
+	}
+
+	pair, err := s.issueTokenPair(ctx, claims.UserID)
+	if err != nil {
+		s.logger.Error("token failed", "op", op, "error", err)
+		return TokenPair{}, err
+	}
+
+	return pair, nil
+}
+
+// Logout отзывает refresh-токен, лишая его возможности выпустить новую пару.
+// Уже выданный access-токен продолжит действовать до истечения своего TTL.
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	const op = "AuthService.Logout"
+
+	if refreshToken == "" {
+		return domain.ErrInvalidToken
+	}
+
+	if err := s.repo.RevokeRefreshToken(ctx, hashToken(refreshToken)); err != nil {
+		s.logger.Error("revoke refresh token failed", "op", op, "error", err)
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+func (s *AuthService) issueTokenPair(ctx context.Context, userID uuid.UUID) (TokenPair, error) {
+	const op = "AuthService.issueTokenPair"
+
+	access, err := token.IssueAccess(userID, s.jwtSecret, s.jwtAccessTTL)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("%s: access: %w", op, err)
+	}
+
+	refresh, err := token.IssueRefresh(userID, s.jwtSecret, s.jwtRefreshTTL)
+	if err != nil {
+		return TokenPair{}, fmt.Errorf("%s: refresh: %w", op, err)
+	}
+
+	rt := domain.RefreshToken{
+		ID:        uuid.New(),
+		UserID:    userID,
+		TokenHash: hashToken(refresh),
+		ExpiresAt: time.Now().Add(s.jwtRefreshTTL),
+		CreatedAt: time.Now(),
+	}
+	if err := s.repo.CreateRefreshToken(ctx, rt); err != nil {
+		return TokenPair{}, fmt.Errorf("%s: create refresh token: %w", op, err)
+	}
+
+	return TokenPair{AccessToken: access, RefreshToken: refresh}, nil
 }
