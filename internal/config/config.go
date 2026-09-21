@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	Port         string
+	GRPCPort     string
 	DSN          string
 	LogLevel     string
 	JWTSecret    string
@@ -17,6 +18,7 @@ type Config struct {
 func Load() (Config, error) {
 	cfg := Config{
 		Port:         ":8080",
+		GRPCPort:     ":9090",
 		DSN:          LoadPostgresConfig().DSN(),
 		LogLevel:     "info",
 		AuditLogPath: "audit.log",
@@ -24,6 +26,9 @@ func Load() (Config, error) {
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
+		cfg.Port = ":" + v
+	}
+	if v := os.Getenv("GRPC_PORT"); v != "" {
 		cfg.Port = ":" + v
 	}
 	if v := os.Getenv("LOG_LEVEL"); v != "" {

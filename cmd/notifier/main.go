@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,6 +21,7 @@ import (
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 	"notifier/internal/service"
+	transportgrpc "notifier/internal/transport/grpc"
 	transporthttp "notifier/internal/transport/http"
 )
 
@@ -127,12 +129,29 @@ func main() {
 		IdleTimeout:       serverIdleTimeout,
 	}
 
+	grpcServer := transportgrpc.NewGRPCServer(notificationService, logger)
+	grpcLis, err := net.Listen("tcp", cfg.GRPCPort)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "grpc listen: %s\n", err)
+		os.Exit(1)
+	}
+
+	// MARK: - Start http server
 	go func() {
 		logger.Info("starting http server", "port", cfg.Port)
 
 		err = srv.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("Error starting http server", "error", err)
+		}
+	}()
+
+	// MARK: - Start gRPC server
+	go func() {
+		logger.Info("starting grpc server", "port", cfg.GRPCPort)
+
+		if err := grpcServer.Serve(grpcLis); err != nil {
+			logger.Error("Error starting grpc server", "error", err)
 		}
 	}()
 
@@ -149,6 +168,9 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("http server shutdown failed", "error", err)
 	}
+
+	logger.Info("shutting down grpc server")
+	grpcServer.GracefulStop()
 
 	logger.Info("waiting for background tasks")
 	notificationService.Wait()
