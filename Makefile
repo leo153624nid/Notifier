@@ -24,7 +24,7 @@ LOG_LEVEL ?= info
 export
 
 .PHONY: build run test test-race lint clean docker-build docker-up docker-start docker-stop docker-down docker-logs release ci help \
-	migrate-build migrate-up migrate-down migrate-version migrate-create
+	migrate-build migrate-up migrate-down migrate-version migrate-create proto
 
 build: ## собрать бинарник в bin/
 	go build -o $(BINARY) $(MAIN_PKG)
@@ -50,6 +50,13 @@ migrate-create: ## создать пару файлов миграции: make m
 	dir=internal/migrations; \
 	touch $$dir/$${ts}_$(name).up.sql $$dir/$${ts}_$(name).down.sql; \
 	echo "created $$dir/$${ts}_$(name).{up,down}.sql"
+
+proto: ## генерация прото файлов
+	protoc \
+  		--go_out=contracts/gen --go_opt=paths=source_relative \
+  		--go-grpc_out=contracts/gen --go-grpc_opt=paths=source_relative \
+  		--proto_path=contracts/proto \
+  		contracts/proto/notifications/v1/notification.proto
 
 test: ## запустить тесты
 	go test ./...

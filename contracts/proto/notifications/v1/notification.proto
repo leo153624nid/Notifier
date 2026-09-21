@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package notifications.v1;
+
+option go_package = "contracts/gen/notifications/v1;notificationv1";
+
+service NotificationService {
+  rpc CreateNotification(CreateNotificationRequest) returns (CreateNotificationResponse);
+}
+
+message CreateNotificationRequest {
+  string recipient = 1; // email пользователя
+  string subject   = 2;
+  string body      = 3;
+  string channel   = 4; // "email" — переиспользуем существующий Sender
+  bool   urgent    = 5;
+}
+
+message CreateNotificationResponse {
+  int64  id     = 1;
+  string status = 2; // "pending" — соответствует domain.Notification.Status
+}
