@@ -76,7 +76,9 @@ func (h *Handler) registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.auth.Register(r.Context(), req.Email, req.Password)
+	requestID := getRequestID(r.Context())
+
+	_, err := h.auth.Register(r.Context(), req.Email, req.Password, requestID)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidCredentials):

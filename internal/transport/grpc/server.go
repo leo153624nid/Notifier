@@ -35,6 +35,7 @@ func NewGRPCServer(notifications *service.NotificationService, logger *slog.Logg
 		),
 	)
 	notificationv1.RegisterNotificationServiceServer(srv, NewRouter(notifications, logger))
+
 	return srv
 }
 

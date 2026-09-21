@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/mail"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 	"uuid"
@@ -34,6 +35,8 @@ type AuthService struct {
 	jwtSecret     string
 	jwtAccessTTL  time.Duration
 	jwtRefreshTTL time.Duration
+	notifier      NotifierClient
+	wg            sync.WaitGroup
 }
 
 func NewAuthService(
@@ -42,6 +45,7 @@ func NewAuthService(
 	jwtSecret string,
 	jwtAccessTTL time.Duration,
 	jwtRefreshTTL time.Duration,
+	notifier NotifierClient,
 ) (*AuthService, error) {
 	const op = "NewAuthService"
 
@@ -60,6 +64,9 @@ func NewAuthService(
 	if jwtRefreshTTL == 0 {
 		return nil, fmt.Errorf("%s: jwt refresh ttl is required", op)
 	}
+	if notifier == nil {
+		return nil, fmt.Errorf("%s: notifier client is required", op)
+	}
 
 	return &AuthService{
 		repo:          repo,
@@ -67,6 +74,7 @@ func NewAuthService(
 		jwtSecret:     jwtSecret,
 		jwtAccessTTL:  jwtAccessTTL,
 		jwtRefreshTTL: jwtRefreshTTL,
+		notifier:      notifier,
 	}, nil
 }
 
@@ -109,9 +117,15 @@ func passwordIsValid(p string) bool {
 	return true
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password string) (domain.User, error) {
+func (s *AuthService) Register(
+	ctx context.Context,
+	email string,
+	password string,
+	requestID string,
+) (domain.User, error) {
 	const op = "AuthService.Register"
 
+	reqLogger := s.logger.With("request_id", requestID)
 	email = strings.ToLower(strings.TrimSpace(email))
 
 	if !emailIsValid(email) || !passwordIsValid(password) {
@@ -120,7 +134,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (dom
 
 	hash, err := passwordToHash(password)
 	if err != nil {
-		s.logger.Error("password to hash failed", "op", op, "error", err)
+		reqLogger.Error("password to hash failed", "op", op, "error", err)
 		return domain.User{}, domain.ErrInvalidCredentials
 	}
 
@@ -139,13 +153,30 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (dom
 		if errors.Is(err, domain.ErrUserExists) {
 			return domain.User{}, domain.ErrUserExists
 		}
-		s.logger.Error("create failed", "op", op, "error", err)
+		reqLogger.Error("create failed", "op", op, "error", err)
 		return domain.User{}, fmt.Errorf("%s: create: %w", op, err)
 	}
+
+	s.wg.Add(1)
+	go s.notifyByEmail(u.Email, requestID)
 
 	u.ID = id
 	u.PasswordHash = "" // without password
 	return u, nil
+}
+
+func (s *AuthService) notifyByEmail(email string, requestID string) {
+	defer s.wg.Done()
+
+	reqLogger := s.logger.With("request_id", requestID)
+
+	notifyCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := s.notifier.Notify(notifyCtx, email)
+	if err != nil {
+		reqLogger.Error("notify failed", "email", email, "error", err)
+	}
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (TokenPair, error) {
@@ -269,4 +300,9 @@ func (s *AuthService) issueTokenPair(ctx context.Context, userID uuid.UUID) (Tok
 		AccessToken:  access,
 		RefreshToken: refresh,
 	}, nil
+}
+
+// Wait блокируется до завершения всех фоновых отправок — используется при graceful shutdown.
+func (s *AuthService) Wait() {
+	s.wg.Wait()
 }

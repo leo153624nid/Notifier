@@ -80,6 +80,7 @@ services:
         condition: service_healthy
     environment:
       PORT: ${PORT:-8080}
+      GRPC_PORT: ${NOTIFIER_GRPC_PORT:-9090}
       JWT_SECRET: ${JWT_SECRET:-devsecret}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Postgres
@@ -99,6 +100,7 @@ services:
       RD_PASSWORD: ${RD_PASSWORD:-notifier}
     ports:
       - "${APP_HOST_PORT:-8080}:${PORT:-8080}"
+      - "${NOTIFIER_GRPC_HOST_PORT:-9090}:${NOTIFIER_GRPC_PORT:-9090}"
 
   postgres_auth:
     image: postgres:16-alpine
@@ -148,6 +150,7 @@ services:
         condition: service_completed_successfully
     environment:
       PORT: ${AUTH_PORT:-8081}
+      NOTIFIER_GRPC_ADDR: notifier:${NOTIFIER_GRPC_PORT:-9090}
       LOG_LEVEL: ${AUTH_LOG_LEVEL:-info}
       JWT_SECRET: ${JWT_SECRET:-devsecret}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}

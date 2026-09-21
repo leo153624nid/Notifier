@@ -29,7 +29,7 @@ func Load() (Config, error) {
 		cfg.Port = ":" + v
 	}
 	if v := os.Getenv("GRPC_PORT"); v != "" {
-		cfg.Port = ":" + v
+		cfg.GRPCPort = ":" + v
 	}
 	if v := os.Getenv("LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v

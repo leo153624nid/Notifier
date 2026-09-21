@@ -26,6 +26,16 @@ func (f fakeDbPinger) Ping(context.Context) error {
 	return f.err
 }
 
+// mockNotifierClient — тестовая заглушка service.NotifierClient. Настоящий
+// notifierclient.Client в нулевом значении содержит nil gRPC-клиент и
+// паникует при вызове Notify, поэтому в HTTP-тестах (которым сам факт
+// уведомления не важен) используем no-op реализацию интерфейса.
+type mockNotifierClient struct{}
+
+func (mockNotifierClient) Notify(context.Context, string) error {
+	return nil
+}
+
 func newMockMemoryRepository(email string) *repository.MemoryRepository {
 	existUser := domain.User{
 		Email: email,
@@ -45,8 +55,9 @@ func newTestHandler(
 	existEmail := "exist@mail.com"
 	repo := newMockMemoryRepository(existEmail)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	notifierClient := mockNotifierClient{}
 
-	auth, err := service.NewAuthService(repo, logger, "secret", 10*time.Minute, 24*time.Hour)
+	auth, err := service.NewAuthService(repo, logger, "secret", 10*time.Minute, 24*time.Hour, notifierClient)
 	if err != nil {
 		t.Fatalf("NewAuthService() error: %s", err)
 	}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	notifierclient "authservice/internal/client/notifierclient"
 	"authservice/internal/config"
 	"authservice/internal/repository"
 	"authservice/internal/service"
@@ -78,8 +79,21 @@ func main() {
 	// откатывать миграции независимо от релизов сервиса.
 
 	repo := repository.NewPostgresRepository(db, logger)
+	notifierClient, err := notifierclient.Dial(cfg.NotifierGRPCAddr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "notifier client failed: %s\n", err)
+		os.Exit(1)
+	}
+	defer notifierClient.Close()
 
-	authService, err := service.NewAuthService(repo, logger, cfg.JWTSecret, cfg.JWTAccessTTL, cfg.JWTRefreshTTL)
+	authService, err := service.NewAuthService(
+		repo,
+		logger,
+		cfg.JWTSecret,
+		cfg.JWTAccessTTL,
+		cfg.JWTRefreshTTL,
+		notifierClient,
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "service: %s\n", err)
 		os.Exit(1)
@@ -120,6 +134,9 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("http server shutdown failed", "error", err)
 	}
+
+	logger.Info("waiting for background tasks")
+	authService.Wait()
 
 	router.Stop()
 
