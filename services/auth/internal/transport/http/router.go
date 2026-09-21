@@ -25,7 +25,7 @@ func NewRouter(h *Handler, logger *slog.Logger) *Router {
 	mux.Handle("POST /api/v1/auth/refresh", rateLimit(http.HandlerFunc(h.refreshToken)))
 	mux.Handle("POST /api/v1/auth/logout", rateLimit(http.HandlerFunc(h.logoutUser)))
 
-	handler := requestID(loggingMiddleware(logger)(contentType(mux)))
+	handler := requestID(loggingRecoverMiddleware(logger)(contentType(mux)))
 
 	return &Router{
 		Handler: handler,

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -242,11 +243,19 @@ func authMiddleware(jwtSecret string, logger *slog.Logger) func(http.Handler) ht
 	}
 }
 
-// MARK: - Logging
-func loggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
+// MARK: - Logging and Recover panic
+func loggingRecoverMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
+			reqID := getRequestID(r.Context())
+
+			defer func() {
+				if p := recover(); p != nil {
+					logger.Error("panic recovered", "request_id", reqID, "panic", p, "stack", debug.Stack())
+					SendJSONError(w, "internal error", http.StatusInternalServerError)
+				}
+			}()
 
 			next.ServeHTTP(w, r)
 
@@ -255,7 +264,7 @@ func loggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 				"method", r.Method,
 				"path", r.URL.Path,
 				"duration", time.Since(start),
-				"request_id", getRequestID(r.Context()),
+				"request_id", reqID,
 			)
 		})
 	}
