@@ -2,10 +2,15 @@ FROM golang:1.27.0 AS builder
 
 WORKDIR /build
 
-COPY go.mod go.sum ./
+# Билд-контекст — корень репозитория (см. docker-compose.yml: build.context),
+# а не services/auth: authservice импортирует contracts/ (сгенерированный
+# gRPC-код) через go.work, а go.work требует, чтобы все перечисленные в нём
+# модули (., ./services/auth, ./contracts) физически лежали рядом на диске.
+COPY . .
+
+WORKDIR /build/services/auth
 RUN go mod download
 
-COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /auth ./cmd/auth
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /migrate ./cmd/migrate
 

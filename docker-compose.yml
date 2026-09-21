@@ -121,7 +121,13 @@ services:
       retries: 5
 
   auth_migrate:
-    build: ./services/auth
+    # Контекст — корень репозитория, а не services/auth: authservice
+    # импортирует contracts/ (сгенерированный gRPC-код) через go.work,
+    # а go.work требует, чтобы все перечисленные в нём модули физически
+    # лежали рядом на диске в момент сборки (см. contracts/, go.work).
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
     image: auth
     container_name: auth_migrate
     restart: "no"
@@ -139,7 +145,9 @@ services:
     command: ["up"]
 
   auth:
-    build: ./services/auth
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
     image: auth
     container_name: auth
     restart: unless-stopped
