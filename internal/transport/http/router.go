@@ -14,8 +14,8 @@ type Router struct {
 	limiter *ipRateLimiter
 }
 
-func NewRouter(h *Handler, apiKey string, logger *slog.Logger) *Router {
-	auth := authMiddleware(apiKey, logger)
+func NewRouter(h *Handler, jwtSecret string, logger *slog.Logger) *Router {
+	auth := authMiddleware(jwtSecret, logger)
 
 	ipLimiter := newIPRateLimiter(rate.Limit(10), 20)
 	rateLimit := rateLimiterMiddleware(ipLimiter)

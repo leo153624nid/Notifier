@@ -2,11 +2,15 @@ package http
 
 import (
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+	"uuid"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"
 )
 
@@ -130,6 +134,101 @@ func TestClientIP(t *testing.T) {
 
 			if got := clientIP(r); got != tt.want {
 				t.Errorf("clientIP(%q) = %q, want %q", tt.remoteAddr, got, tt.want)
+			}
+		})
+	}
+}
+
+func newTestToken(t *testing.T, userID uuid.UUID, secret string, ttl time.Duration) string {
+	t.Helper()
+
+	claims := jwtClaims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
+		},
+	}
+
+	tok, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign token: %s", err)
+	}
+
+	return tok
+}
+
+func TestAuthMiddleware_AllowsValidToken(t *testing.T) {
+	secret := "test-secret"
+	userID := uuid.New()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	var gotUserID uuid.UUID
+	var gotOK bool
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUserID, gotOK = getUserID(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authMiddleware(secret, logger)(next)
+
+	tok := newTestToken(t, userID, secret, time.Minute)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Authorization", "Bearer "+tok)
+
+	handler.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !gotOK {
+		t.Fatal("userID was not set in context")
+	}
+	if gotUserID != userID {
+		t.Errorf("userID = %s, want %s", gotUserID, userID)
+	}
+}
+
+func TestAuthMiddleware_Rejects(t *testing.T) {
+	secret := "test-secret"
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	handler := authMiddleware(secret, logger)(okHandler())
+
+	tests := []struct {
+		name   string
+		header string
+	}{
+		{"no header", ""},
+		{"no bearer prefix", newTestToken(t, uuid.New(), secret, time.Minute)},
+		{"empty bearer token", "Bearer "},
+		{"wrong secret", "Bearer " + newTestToken(t, uuid.New(), "wrong-secret", time.Minute)},
+		{"expired token", "Bearer " + newTestToken(t, uuid.New(), secret, -time.Minute)},
+		{"garbage token", "Bearer not.a.jwt"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.header != "" {
+				r.Header.Set("Authorization", tt.header)
+			}
+
+			handler.ServeHTTP(w, r)
+
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+			}
+
+			var apiErr APIError
+			if err := json.NewDecoder(w.Body).Decode(&apiErr); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if apiErr.Error == "" {
+				t.Error("error message is empty")
 			}
 		})
 	}

@@ -80,7 +80,7 @@ services:
         condition: service_healthy
     environment:
       PORT: ${PORT:-8080}
-      API_KEY: ${API_KEY:-secret}
+      JWT_SECRET: ${JWT_SECRET:-devsecret}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Postgres
       # Внутри docker-сети адрес БД всегда postgres:5432 — это топология
@@ -100,5 +100,68 @@ services:
     ports:
       - "${APP_HOST_PORT:-8080}:${PORT:-8080}"
 
+  postgres_auth:
+    image: postgres:16-alpine
+    container_name: postgres_auth
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${AUTH_PG_USER:-auth}
+      POSTGRES_PASSWORD: ${AUTH_PG_PASSWORD:-auth}
+      POSTGRES_DB: ${AUTH_PG_DBNAME:-auth}
+    ports:
+      - "${AUTH_POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - pgdata_auth:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_PG_USER:-auth} -d ${AUTH_PG_DBNAME:-auth}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  auth_migrate:
+    build: ./services/auth
+    image: auth
+    container_name: auth_migrate
+    restart: "no"
+    depends_on:
+      postgres_auth:
+        condition: service_healthy
+    environment:
+      PG_HOST: postgres_auth
+      PG_PORT: 5432
+      PG_USER: ${AUTH_PG_USER:-auth}
+      PG_PASSWORD: ${AUTH_PG_PASSWORD:-auth}
+      PG_DBNAME: ${AUTH_PG_DBNAME:-auth}
+      PG_SSLMODE: ${AUTH_PG_SSLMODE:-disable}
+    entrypoint: ["/migrate"]
+    command: ["up"]
+
+  auth:
+    build: ./services/auth
+    image: auth
+    container_name: auth
+    restart: unless-stopped
+    depends_on:
+      postgres_auth:
+        condition: service_healthy
+      auth_migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: ${AUTH_PORT:-8081}
+      LOG_LEVEL: ${AUTH_LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET:-devsecret}
+      JWT_TTL: ${JWT_TTL:-15m}
+      # Внутри docker-сети адрес БД всегда postgres_auth:5432 — см. комментарий
+      # к аналогичным переменным сервиса notifier выше.
+      PG_HOST: postgres_auth
+      PG_PORT: 5432
+      PG_USER: ${AUTH_PG_USER:-auth}
+      PG_PASSWORD: ${AUTH_PG_PASSWORD:-auth}
+      PG_DBNAME: ${AUTH_PG_DBNAME:-auth}
+      PG_SSLMODE: ${AUTH_PG_SSLMODE:-disable}
+    ports:
+      - "${AUTH_APP_HOST_PORT:-8081}:${AUTH_PORT:-8081}"
+
 volumes:
   pgdata:
+  pgdata_auth:

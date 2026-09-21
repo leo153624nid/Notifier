@@ -116,7 +116,7 @@ func main() {
 	healthService := service.NewHealthService(db, cache.NewPinger(cacheRepo))
 
 	handler := transporthttp.NewHandler(notificationService, healthService, logger, appName, appVersion)
-	router := transporthttp.NewRouter(handler, cfg.APIkey, logger)
+	router := transporthttp.NewRouter(handler, cfg.JWTSecret, logger)
 
 	srv := &http.Server{
 		Addr:              cfg.Port,

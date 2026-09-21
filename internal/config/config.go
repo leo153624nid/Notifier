@@ -9,7 +9,7 @@ type Config struct {
 	Port         string
 	DSN          string
 	LogLevel     string
-	APIkey       string
+	JWTSecret    string
 	AuditLogPath string
 	RedisCfg     RedisConfig
 }
@@ -33,11 +33,13 @@ func Load() (Config, error) {
 		cfg.AuditLogPath = v
 	}
 
-	apiKey, ok := os.LookupEnv("API_KEY")
-	if !ok || apiKey == "" {
-		return Config{}, fmt.Errorf("config: API_KEY is required")
+	// Общий секрет с auth-сервисом: им notifier проверяет подпись JWT,
+	// который выдаёт auth (см. services/auth/internal/token).
+	jwtSecret, ok := os.LookupEnv("JWT_SECRET")
+	if !ok || jwtSecret == "" {
+		return Config{}, fmt.Errorf("config: JWT_SECRET is required")
 	}
-	cfg.APIkey = apiKey
+	cfg.JWTSecret = jwtSecret
 
 	return cfg, nil
 }

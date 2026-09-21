@@ -7,7 +7,7 @@
 - REST API для создания, получения и листинга уведомлений
 - Асинхронная отправка через набор `Sender` (`console`, `email`, `telegram`)
 - Хранение в PostgreSQL, схема БД версионируется миграциями (`cmd/migrate`)
-- Аутентификация по API-ключу (заголовок `X-API-KEY`)
+- Аутентификация по JWT (заголовок `Authorization: Bearer <token>`), токен выдаёт отдельный auth-сервис (`services/auth`) и подписывает общим `JWT_SECRET`
 - Rate limiting по IP (token bucket, 10 запросов/сек, burst 20)
 - Structured logging (`log/slog`, JSON), request ID на каждый запрос
 - Graceful shutdown с ожиданием фоновых горутин отправки
@@ -29,7 +29,7 @@ cp .env.example .env
 make docker-up
 ```
 
-Поднимутся три контейнера: `postgres`, разовый `migrate` (применяет миграции схемы и завершается) и `notifier`, который стартует только после его успешного завершения (`depends_on: condition: service_completed_successfully`). Сервис будет доступен на `http://localhost:8080`.
+Поднимутся `postgres`, разовый `migrate` (применяет миграции схемы и завершается) и `notifier`, который стартует только после его успешного завершения (`depends_on: condition: service_completed_successfully`), а также зеркальный набор для auth-сервиса — `postgres_auth`, `auth_migrate`, `auth`. Notifier будет доступен на `http://localhost:8080`, auth — на `http://localhost:8081`. Оба сервиса используют общий `JWT_SECRET`: auth подписывает им токены, notifier проверяет подпись.
 
 Другие команды для работы с Docker:
 
@@ -70,7 +70,7 @@ make docker-up ENV_FILE=.env.prod
 | Переменная | Описание | По умолчанию |
 |---|---|---|
 | `PORT` | Порт HTTP-сервера | `8080` |
-| `API_KEY` | Ключ для аутентификации запросов (обязателен) | — |
+| `JWT_SECRET` | Общий с auth-сервисом секрет для проверки подписи JWT (обязателен) | — |
 | `LOG_LEVEL` | Уровень логирования (`debug`/`info`/`warn`/`error`) | `info` |
 | `AUDIT_LOG_PATH` | Путь к файлу аудит-лога | `audit.log` |
 | `PG_HOST` | Хост Postgres | `localhost` |
@@ -118,7 +118,7 @@ make migrate-create name=add_foo  # создать новую пару файл�
 
 ## API
 
-Все эндпоинты, кроме `/health`, требуют заголовок `X-API-KEY` со значением `API_KEY` и подчиняются rate limiting по IP.
+Все эндпоинты, кроме `/health`, требуют заголовок `Authorization: Bearer <token>` с JWT, выданным auth-сервисом (`POST /api/v1/auth/login`, см. `services/auth`), и подчиняются rate limiting по IP.
 
 ### `GET /health`
 
@@ -134,7 +134,7 @@ curl http://localhost:8080/health
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/notifications \
-  -H "X-API-KEY: secret" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "to": "user@example.com",
@@ -152,7 +152,7 @@ curl -X POST http://localhost:8080/api/v1/notifications \
 Список всех уведомлений.
 
 ```bash
-curl http://localhost:8080/api/v1/notifications -H "X-API-KEY: secret"
+curl http://localhost:8080/api/v1/notifications -H "Authorization: Bearer $TOKEN"
 ```
 
 ### `GET /api/v1/notifications/{id}`
@@ -160,7 +160,7 @@ curl http://localhost:8080/api/v1/notifications -H "X-API-KEY: secret"
 Получить уведомление по ID.
 
 ```bash
-curl http://localhost:8080/api/v1/notifications/1 -H "X-API-KEY: secret"
+curl http://localhost:8080/api/v1/notifications/1 -H "Authorization: Bearer $TOKEN"
 ```
 
 ### `GET /api/v1/notifications/export`
@@ -168,7 +168,15 @@ curl http://localhost:8080/api/v1/notifications/1 -H "X-API-KEY: secret"
 Выгрузить все уведомления в аудит-лог (`AUDIT_LOG_PATH`) и вернуть количество экспортированных записей.
 
 ```bash
-curl http://localhost:8080/api/v1/notifications/export -H "X-API-KEY: secret"
+curl http://localhost:8080/api/v1/notifications/export -H "Authorization: Bearer $TOKEN"
+```
+
+`$TOKEN` — значение `access_token`, полученное от auth-сервиса:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8081/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "supersecret"}' | jq -r .access_token)
 ```
 
 ## Разработка

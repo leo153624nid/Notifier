@@ -18,7 +18,7 @@ ENV_FILE ?= .env
 # запасные значения на случай, если $(ENV_FILE) отсутствует или не
 # задаёт переменную (например, на чистом чекауте без cp .env.example .env)
 PORT ?= 8080
-API_KEY ?= secret
+JWT_SECRET ?= devsecret
 LOG_LEVEL ?= info
 
 export

@@ -3,15 +3,18 @@ package http
 import (
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+	"uuid"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"
 )
 
@@ -149,19 +152,82 @@ func contentType(next http.Handler) http.Handler {
 }
 
 // MARK: - Auth
-func authMiddleware(apiKey string, logger *slog.Logger) func(http.Handler) http.Handler {
+type userIDKeyType struct{}
+
+var userIDKey = userIDKeyType{}
+
+// jwtClaims — формат токена, который выдаёт auth-сервис (см.
+// services/auth/internal/token.Claims). Notifier только проверяет подпись
+// и вычитывает userID, сам токены не выпускает.
+type jwtClaims struct {
+	UserID uuid.UUID `json:"sub"`
+	jwt.RegisteredClaims
+}
+
+func getUserID(ctx context.Context) (uuid.UUID, bool) {
+	id, ok := ctx.Value(userIDKey).(uuid.UUID)
+	return id, ok
+}
+
+func bearerToken(r *http.Request) (string, bool) {
+	const prefix = "Bearer "
+
+	h := r.Header.Get("Authorization")
+	if !strings.HasPrefix(h, prefix) {
+		return "", false
+	}
+
+	tok := strings.TrimSpace(strings.TrimPrefix(h, prefix))
+	if tok == "" {
+		return "", false
+	}
+
+	return tok, true
+}
+
+func parseUserID(tokenString, secret string) (uuid.UUID, error) {
+	var claims jwtClaims
+
+	tok, err := jwt.ParseWithClaims(tokenString, &claims, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrTokenSignatureInvalid
+		}
+		if t.Header["alg"] != jwt.SigningMethodHS256.Alg() {
+			return nil, jwt.ErrTokenSignatureInvalid
+		}
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("parse token: %w", err)
+	}
+	if !tok.Valid {
+		return uuid.UUID{}, fmt.Errorf("parse token: invalid token")
+	}
+
+	return claims.UserID, nil
+}
+
+func authMiddleware(jwtSecret string, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := r.Header.Get("X-API-KEY")
-
-			if subtle.ConstantTimeCompare([]byte(key), []byte(apiKey)) != 1 {
-				logger.Warn("auth failed", "path", r.URL.Path, "method", r.Method, "remote", r.RemoteAddr)
+			tokenString, ok := bearerToken(r)
+			if !ok {
+				logger.Warn("auth failed", "path", r.URL.Path, "method", r.Method, "remote", r.RemoteAddr, "reason", "missing bearer token")
 				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(APIError{Error: "invalid or missing api key"})
+				_ = json.NewEncoder(w).Encode(APIError{Error: "invalid or missing bearer token"})
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			userID, err := parseUserID(tokenString, jwtSecret)
+			if err != nil {
+				logger.Warn("auth failed", "path", r.URL.Path, "method", r.Method, "remote", r.RemoteAddr, "error", err)
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(APIError{Error: "invalid or expired token"})
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), userIDKey, userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
