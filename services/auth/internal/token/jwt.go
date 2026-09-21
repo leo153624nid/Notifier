@@ -9,8 +9,8 @@ import (
 )
 
 type Claims struct {
-	UserID uuid.UUID `json:"sub"`
 	jwt.RegisteredClaims
+	UserID uuid.UUID `json:"sub"`
 }
 
 func Issue(userID uuid.UUID, secret string, ttl time.Duration) (string, error) {

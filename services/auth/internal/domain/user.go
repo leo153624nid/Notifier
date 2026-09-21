@@ -8,10 +8,10 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID
-	Email        string
-	PasswordHash string
-	CreatedAt    time.Time
+	CreatedAt    time.Time `json:"created_at"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"`
+	ID           uuid.UUID `json:"id"`
 }
 
 func (u User) Validate() error {

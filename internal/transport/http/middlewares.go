@@ -160,8 +160,8 @@ var userIDKey = userIDKeyType{}
 // services/auth/internal/token.Claims). Notifier только проверяет подпись
 // и вычитывает userID, сам токены не выпускает.
 type jwtClaims struct {
-	UserID uuid.UUID `json:"sub"`
 	jwt.RegisteredClaims
+	UserID uuid.UUID `json:"sub"`
 }
 
 func getUserID(ctx context.Context) (uuid.UUID, bool) {

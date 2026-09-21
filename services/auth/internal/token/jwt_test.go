@@ -13,6 +13,7 @@ func checkPrefixSuffix(str, substr string) bool {
 	return len(str) >= len(substr) && (str == substr || (len(substr) > 0 && (str[:len(substr)] == substr || str[len(str)-len(substr):] == substr)))
 }
 
+//nolint:govet
 func TestIssue(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -12,6 +12,7 @@ import (
 	"authservice/internal/domain"
 )
 
+//nolint:govet
 func TestCreate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -106,6 +107,7 @@ func TestMemoryRepository_ConcurrentCreate(t *testing.T) {
 	}
 }
 
+//nolint:govet
 func TestGetByEmail(t *testing.T) {
 	tests := []struct {
 		name    string

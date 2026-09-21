@@ -109,8 +109,8 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (dom
 		PasswordHash: string(hash),
 		CreatedAt:    time.Now(),
 	}
-	if err := u.Validate(); err != nil {
-		return domain.User{}, fmt.Errorf("%s: validate: %w", op, err)
+	if validErr := u.Validate(); validErr != nil {
+		return domain.User{}, fmt.Errorf("%s: validate: %w", op, validErr)
 	}
 
 	id, err := s.repo.Create(ctx, u)

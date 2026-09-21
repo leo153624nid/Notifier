@@ -6,6 +6,7 @@ import (
 	"uuid"
 )
 
+//nolint:govet
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string

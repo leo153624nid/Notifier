@@ -241,7 +241,7 @@ func TestLogin(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewAuthService() failed")
 			}
-			s.Register(context.Background(), existEmail, existPassword)
+			_, _ = s.Register(context.Background(), existEmail, existPassword)
 
 			tok, err := s.Login(context.Background(), tt.email, tt.password)
 

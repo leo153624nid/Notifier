@@ -5,14 +5,13 @@ import (
 	"unicode/utf8"
 )
 
-//nolint:govet
 type Notification struct {
-	ID        int    `json:"id"`
 	Recipient string `json:"to"`
 	Subject   string `json:"subject"`
 	Body      string `json:"body"`
 	Channel   string `json:"channel"`
 	Status    string `json:"status"`
+	ID        int    `json:"id"`
 	IsUrgent  bool   `json:"urgent"`
 }
 
