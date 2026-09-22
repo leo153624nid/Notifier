@@ -78,6 +78,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     environment:
       PORT: ${PORT:-8080}
       GRPC_PORT: ${NOTIFIER_GRPC_PORT:-9090}
@@ -156,6 +158,8 @@ services:
         condition: service_healthy
       auth_migrate:
         condition: service_completed_successfully
+      kafka:
+        condition: service_healthy
     environment:
       PORT: ${AUTH_PORT:-8081}
       NOTIFIER_GRPC_ADDR: notifier:${NOTIFIER_GRPC_PORT:-9090}
@@ -173,6 +177,28 @@ services:
       PG_SSLMODE: ${AUTH_PG_SSLMODE:-disable}
     ports:
       - "${AUTH_APP_HOST_PORT:-8081}:${AUTH_PORT:-8081}"
+
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: notifier_kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      CLUSTER_ID: "notifier-dev-cluster"
+    ports:
+      - "${KAFKA_HOST_PORT:-9092}:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
 
 volumes:
   pgdata:

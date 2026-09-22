@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type Config struct {
 	JWTAccessTTL     time.Duration
 	JWTRefreshTTL    time.Duration
 	NotifierGRPCAddr string
+	KafkaBrokers     []string
 }
 
 func Load() (Config, error) {
@@ -24,6 +26,7 @@ func Load() (Config, error) {
 		JWTAccessTTL:     15 * time.Minute,
 		JWTRefreshTTL:    30 * 24 * time.Hour,
 		NotifierGRPCAddr: "localhost:9090",
+		KafkaBrokers:     []string{"kafka:9092"},
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
@@ -48,6 +51,9 @@ func Load() (Config, error) {
 	}
 	if v := os.Getenv("NOTIFIER_GRPC_ADDR"); v != "" {
 		cfg.NotifierGRPCAddr = v
+	}
+	if v := os.Getenv("KAFKA_BROKERS"); v != "" {
+		cfg.KafkaBrokers = strings.Split(v, ",")
 	}
 
 	secret, ok := os.LookupEnv("JWT_SECRET")

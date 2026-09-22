@@ -23,6 +23,7 @@ import (
 	"notifier/internal/service"
 	transportgrpc "notifier/internal/transport/grpc"
 	transporthttp "notifier/internal/transport/http"
+	"notifier/internal/transport/kafka"
 )
 
 const (
@@ -136,6 +137,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	loginConsumer := kafka.NewLoginConsumer(
+		cfg.KafkaBrokers,
+		"notifier-login-consumer",
+		notificationService,
+		logger,
+	)
+
+	// MARK: - Start consumers
+	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+	go loginConsumer.Run(consumerCtx)
+
 	// MARK: - Start http server
 	go func() {
 		logger.Info("starting http server", "port", cfg.Port)
@@ -167,6 +179,12 @@ func main() {
 	logger.Info("shutting down http server")
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("http server shutdown failed", "error", err)
+	}
+
+	logger.Info("shutting down consumers")
+	consumerCancel()
+	if err := loginConsumer.Close(); err != nil {
+		logger.Error("close() login consumer failed", "error", err)
 	}
 
 	logger.Info("shutting down grpc server")

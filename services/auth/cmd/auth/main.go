@@ -14,11 +14,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"authservice/internal/client/kafkaproducer"
 	notifierclient "authservice/internal/client/notifierclient"
 	"authservice/internal/config"
 	"authservice/internal/repository"
 	"authservice/internal/service"
 	transporthttp "authservice/internal/transport/http"
+	authevents "contracts/events/auth/v1"
 )
 
 const (
@@ -86,6 +88,16 @@ func main() {
 	}
 	defer notifierClient.Close()
 
+	events := kafkaproducer.New(
+		cfg.KafkaBrokers,
+		authevents.TopicUserLoggedIn,
+	)
+	defer func() {
+		if err := events.CLose(); err != nil {
+			logger.Error("event publisher closing failed", "error", err)
+		}
+	}()
+
 	authService, err := service.NewAuthService(
 		repo,
 		logger,
@@ -93,6 +105,7 @@ func main() {
 		cfg.JWTAccessTTL,
 		cfg.JWTRefreshTTL,
 		notifierClient,
+		events,
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "service: %s\n", err)

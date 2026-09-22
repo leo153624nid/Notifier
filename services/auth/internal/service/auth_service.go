@@ -36,6 +36,7 @@ type AuthService struct {
 	jwtAccessTTL  time.Duration
 	jwtRefreshTTL time.Duration
 	notifier      NotifierClient
+	events        EventPublisher
 	wg            sync.WaitGroup
 }
 
@@ -46,6 +47,7 @@ func NewAuthService(
 	jwtAccessTTL time.Duration,
 	jwtRefreshTTL time.Duration,
 	notifier NotifierClient,
+	events EventPublisher,
 ) (*AuthService, error) {
 	const op = "NewAuthService"
 
@@ -67,6 +69,9 @@ func NewAuthService(
 	if notifier == nil {
 		return nil, fmt.Errorf("%s: notifier client is required", op)
 	}
+	if events == nil {
+		return nil, fmt.Errorf("%s: events publisher is required", op)
+	}
 
 	return &AuthService{
 		repo:          repo,
@@ -75,6 +80,7 @@ func NewAuthService(
 		jwtAccessTTL:  jwtAccessTTL,
 		jwtRefreshTTL: jwtRefreshTTL,
 		notifier:      notifier,
+		events:        events,
 	}, nil
 }
 
@@ -206,7 +212,24 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (TokenP
 		return TokenPair{}, err
 	}
 
+	s.wg.Add(1)
+	go s.publishLoginEvent(u.ID, u.Email)
+
 	return pair, nil
+}
+
+func (s *AuthService) publishLoginEvent(userID uuid.UUID, email string) {
+	const op = "AuthService.publishLoginEvent"
+
+	defer s.wg.Done()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := s.events.PublishUserLoggedInEvent(ctx, userID, email)
+	if err != nil {
+		s.logger.Error("publish login event failed", "op", op, "error", err, "user_id", userID.String())
+	}
 }
 
 func (s *AuthService) Delete(ctx context.Context, refreshToken string) error {
