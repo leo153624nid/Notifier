@@ -125,6 +125,17 @@ func (s *NotificationService) Get(ctx context.Context, id int) (domain.Notificat
 	return n, nil
 }
 
+func (s *NotificationService) Delete(ctx context.Context, id int) error {
+	const op = "NotificationService.Delete"
+
+	err := s.repo.DeleteById(ctx, id)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
 // List возвращает страницу уведомлений, нормализуя page/size к разумным значениям по умолчанию.
 func (s *NotificationService) List(ctx context.Context, page int, size int) ([]domain.Notification, error) {
 	const op = "NotificationService.List"

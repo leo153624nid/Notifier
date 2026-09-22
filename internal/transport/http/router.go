@@ -25,6 +25,7 @@ func NewRouter(h *Handler, jwtSecret string, logger *slog.Logger) *Router {
 	mux.Handle("GET /api/v1/notifications", rateLimit(auth(http.HandlerFunc(h.listNotifications))))
 	mux.Handle("GET /api/v1/notifications/export", rateLimit(auth(http.HandlerFunc(h.exportNotification))))
 	mux.Handle("GET /api/v1/notifications/{id}", rateLimit(auth(http.HandlerFunc(h.getNotification))))
+	mux.Handle("DELETE /api/v1/notifications/{id}", rateLimit(auth(http.HandlerFunc(h.deleteNotification))))
 	mux.Handle("POST /api/v1/notifications", rateLimit(auth(http.HandlerFunc(h.createNotification))))
 
 	handler := requestID(loggingRecoverMiddleware(logger)(contentType(mux)))

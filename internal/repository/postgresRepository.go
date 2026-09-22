@@ -24,6 +24,7 @@ func NewPostgresRepository(db *pgxpool.Pool, logger *slog.Logger) *PostgresRepos
 	}
 }
 
+// MARK: - `NotificationRepo` interface implementation
 func (r *PostgresRepository) Save(ctx context.Context, n domain.Notification) (int, error) {
 	const op = "PostgresRepository.Save"
 
@@ -116,6 +117,26 @@ func (r *PostgresRepository) GetById(ctx context.Context, id int) (domain.Notifi
 	}
 
 	return n, nil
+}
+
+func (r *PostgresRepository) DeleteById(ctx context.Context, id int) error {
+	const op = "PostgresRepository.DeleteById"
+
+	result, err := r.db.Exec(
+		ctx,
+		`DELETE 
+		FROM notifications WHERE id=$1`,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("%s: delete: %w", op, err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("%s: delete: %w", op, domain.ErrNotFound)
+	}
+
+	return nil
 }
 
 func (r *PostgresRepository) UpdateStatus(ctx context.Context, id int, status string) error {

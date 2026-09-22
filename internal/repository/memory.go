@@ -97,6 +97,22 @@ func (r *MemoryRepository) GetById(_ context.Context, id int) (domain.Notificati
 	return n, nil
 }
 
+func (r *MemoryRepository) DeleteById(_ context.Context, id int) error {
+	const op = "MemoryRepository.DeleteById"
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	_, ok := r.notifications[id]
+	if !ok {
+		return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
+	}
+
+	delete(r.notifications, id)
+
+	return nil
+}
+
 func (r *MemoryRepository) UpdateStatus(_ context.Context, id int, status string) error {
 	const op = "MemoryRepository.UpdateStatus"
 

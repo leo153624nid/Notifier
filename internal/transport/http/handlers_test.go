@@ -234,6 +234,64 @@ func TestGetNotification(t *testing.T) {
 	}
 }
 
+func TestDeleteNotification(t *testing.T) {
+	tests := []struct {
+		name       string
+		id         string
+		wantStatus int
+		wantErr    bool
+	}{
+		{
+			name:       "valid request",
+			id:         "1",
+			wantStatus: http.StatusNoContent,
+			wantErr:    false,
+		},
+		{
+			name:       "no such id",
+			id:         "22",
+			wantStatus: http.StatusNotFound,
+			wantErr:    true,
+		},
+		{
+			name:       "wrong id",
+			id:         "someId",
+			wantStatus: http.StatusBadRequest,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &sender.MockSender{}
+			h, repo := newTestHandler(
+				t,
+				map[string]sender.Sender{"email": mock},
+				fakeDbPinger{},
+				fakeCachePinger{},
+			)
+
+			_, err := repo.Save(context.Background(), notificationFixture())
+			if err != nil {
+				t.Fatalf("save notification error: %s", err)
+			}
+
+			r := httptest.NewRequest("DELETE", "/api/v1/notifications/{id}", nil)
+			r.SetPathValue("id", tt.id)
+			w := httptest.NewRecorder()
+
+			h.deleteNotification(w, r)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", w.Code, tt.wantStatus)
+			}
+			if tt.wantErr && !strings.Contains(w.Body.String(), "error") {
+				t.Errorf("body = %q, want contains %q", w.Body.String(), "error")
+			}
+		})
+	}
+}
+
 func TestListNotifications(t *testing.T) {
 	tests := []struct {
 		name       string

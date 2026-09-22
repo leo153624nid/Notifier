@@ -111,6 +111,31 @@ func (h *Handler) getNotification(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(js)
 }
 
+func (h *Handler) deleteNotification(w http.ResponseWriter, r *http.Request) {
+	const op = "Handler.deleteNotification"
+
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		SendJSONError(w, domain.ErrInvalidID.Error(), http.StatusBadRequest)
+		return
+	}
+
+	delErr := h.notifications.Delete(r.Context(), id)
+	if delErr != nil {
+		if errors.Is(delErr, domain.ErrNotFound) {
+			SendJSONError(w, domain.ErrNotFound.Error(), http.StatusNotFound)
+			return
+		}
+
+		h.logger.Error("delete notification failed", "op", op, "error", delErr)
+		SendJSONError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) listNotifications(w http.ResponseWriter, r *http.Request) {
 	const op = "Handler.listNotifications"
 

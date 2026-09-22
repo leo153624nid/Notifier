@@ -180,6 +180,30 @@ func TestNotificationService_Get(t *testing.T) {
 	}
 }
 
+func TestNotificationService_Delete(t *testing.T) {
+	mock := &sender.MockSender{}
+	s := newTestService(t, map[string]sender.Sender{"email": mock})
+
+	created, err := s.Create(context.Background(), domain.Notification{
+		Recipient: "test@mail.com",
+		Channel:   "email",
+	}, "req-1")
+	if err != nil {
+		t.Fatalf("Create() error: %s", err)
+	}
+	s.Wait()
+
+	err = s.Delete(context.Background(), 9999)
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Errorf("error = %v, want ErrNotFound", err)
+	}
+
+	err = s.Delete(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Delete() error: %s", err)
+	}
+}
+
 func TestNotificationService_List(t *testing.T) {
 	mock := &sender.MockSender{}
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
