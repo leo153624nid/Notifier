@@ -64,14 +64,16 @@ func (r *MemoryRepository) Delete(_ context.Context, userID uuid.UUID) error {
 	defer r.mu.Unlock()
 
 	var email string
+	var found bool
 	for _, user := range r.users {
 		if user.ID == userID {
 			email = user.Email
+			found = true
+			break
 		}
 	}
 
-	_, ok := r.users[email]
-	if !ok {
+	if !found {
 		return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
 	}
 

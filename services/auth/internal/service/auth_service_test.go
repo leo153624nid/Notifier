@@ -356,6 +356,93 @@ func TestLogin(t *testing.T) {
 	}
 }
 
+func TestDelete(t *testing.T) {
+	existEmail := "exist@mail.com"
+	existPassword := "12345678"
+
+	t.Run("valid refresh token deletes user and revokes token", func(t *testing.T) {
+		repo := repository.NewMemoryRepository()
+		s := newTestAuthService(t, repo)
+		_, err := s.Register(context.Background(), existEmail, existPassword, "testRequestID")
+		if err != nil {
+			t.Fatalf("Register() error: %s", err)
+		}
+
+		pair, err := s.Login(context.Background(), existEmail, existPassword)
+		if err != nil {
+			t.Fatalf("Login() error: %s", err)
+		}
+
+		if err := s.Delete(context.Background(), pair.RefreshToken); err != nil {
+			t.Fatalf("Delete() error: %s", err)
+		}
+
+		// пользователь удалён — повторный вход невозможен
+		if _, err := s.Login(context.Background(), existEmail, existPassword); !errors.Is(err, domain.ErrInvalidCredentials) {
+			t.Errorf("Login() after Delete error = %v, want %v", err, domain.ErrInvalidCredentials)
+		}
+
+		// refresh-токен отозван вместе с удалением
+		if _, err := s.Refresh(context.Background(), pair.RefreshToken); !errors.Is(err, domain.ErrInvalidToken) {
+			t.Errorf("Refresh() after Delete error = %v, want %v", err, domain.ErrInvalidToken)
+		}
+	})
+
+	t.Run("empty token", func(t *testing.T) {
+		repo := repository.NewMemoryRepository()
+		s := newTestAuthService(t, repo)
+
+		if err := s.Delete(context.Background(), ""); !errors.Is(err, domain.ErrInvalidToken) {
+			t.Errorf("Delete() error = %v, want %v", err, domain.ErrInvalidToken)
+		}
+	})
+
+	t.Run("garbage token", func(t *testing.T) {
+		repo := repository.NewMemoryRepository()
+		s := newTestAuthService(t, repo)
+
+		if err := s.Delete(context.Background(), "not-a-token"); !errors.Is(err, domain.ErrInvalidToken) {
+			t.Errorf("Delete() error = %v, want %v", err, domain.ErrInvalidToken)
+		}
+	})
+
+	t.Run("access token used instead of refresh", func(t *testing.T) {
+		repo := repository.NewMemoryRepository()
+		s := newTestAuthService(t, repo)
+		_, _ = s.Register(context.Background(), existEmail, existPassword, "testRequestID")
+
+		pair, err := s.Login(context.Background(), existEmail, existPassword)
+		if err != nil {
+			t.Fatalf("Login() error: %s", err)
+		}
+
+		if err := s.Delete(context.Background(), pair.AccessToken); !errors.Is(err, domain.ErrInvalidToken) {
+			t.Errorf("Delete() with access token error = %v, want %v", err, domain.ErrInvalidToken)
+		}
+	})
+
+	t.Run("already used refresh token", func(t *testing.T) {
+		repo := repository.NewMemoryRepository()
+		s := newTestAuthService(t, repo)
+		_, _ = s.Register(context.Background(), existEmail, existPassword, "testRequestID")
+
+		pair, err := s.Login(context.Background(), existEmail, existPassword)
+		if err != nil {
+			t.Fatalf("Login() error: %s", err)
+		}
+
+		// ротация делает refresh-токен использованным (отозванным),
+		// но не удаляет пользователя из репозитория
+		if _, err := s.Refresh(context.Background(), pair.RefreshToken); err != nil {
+			t.Fatalf("Refresh() error: %s", err)
+		}
+
+		if err := s.Delete(context.Background(), pair.RefreshToken); err != nil {
+			t.Errorf("Delete() with already-used refresh token error: %s, want nil (JWT itself is still structurally valid)", err)
+		}
+	})
+}
+
 func TestRefresh(t *testing.T) {
 	existEmail := "exist@mail.com"
 	existPassword := "12345678"
