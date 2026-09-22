@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	authevents "contracts/events/auth/v1"
@@ -51,25 +52,37 @@ func (c *LoginConsumer) Run(ctx context.Context) {
 			continue
 		}
 
-		var event authevents.UserLoggedIn
-		if err := json.Unmarshal(msg.Value, &event); err != nil {
-			c.logger.Error("unmarshal failed", "op", op, "error", err)
-			continue
-		}
-
-		n := domain.Notification{
-			Recipient: event.Email,
-			Subject:   "New login",
-			Body:      "A new login to your account was detected",
-			Channel:   "email",
-			IsUrgent:  true,
-		}
-
-		if _, err := c.service.Create(ctx, n, ""); err != nil {
-			c.logger.Error("create notification failed", "op", op, "error", err)
-			continue
+		if err := c.handleMessage(ctx, msg.Value); err != nil {
+			c.logger.Error("handle message failed", "op", op, "error", err)
 		}
 	}
+}
+
+// handleMessage разбирает одно Kafka-сообщение из топика auth.user.logged_in
+// и создаёт по нему уведомление. Вынесена из Run отдельно, чтобы её можно
+// было протестировать без реального брокера — Run отвечает только за цикл
+// чтения, handleMessage — за саму бизнес-обработку события.
+func (c *LoginConsumer) handleMessage(ctx context.Context, value []byte) error {
+	const op = "Consumer.handleMessage"
+
+	var event authevents.UserLoggedIn
+	if err := json.Unmarshal(value, &event); err != nil {
+		return fmt.Errorf("%s: unmarshal: %w", op, err)
+	}
+
+	n := domain.Notification{
+		Recipient: event.Email,
+		Subject:   "New login",
+		Body:      "A new login to your account was detected",
+		Channel:   "email",
+		IsUrgent:  true,
+	}
+
+	if _, err := c.service.Create(ctx, n, ""); err != nil {
+		return fmt.Errorf("%s: create notification: %w", op, err)
+	}
+
+	return nil
 }
 
 func (c *LoginConsumer) Close() error {

@@ -6,6 +6,7 @@
 
 - REST API для создания, получения и листинга уведомлений
 - gRPC API (`internal/transport/grpc`) — тот же сценарий создания уведомления, но для межсервисного вызова: им пользуется auth-сервис, чтобы отправить приветственное письмо при регистрации (см. «Интеграция с auth (gRPC)»)
+- Kafka-консьюмер (`internal/transport/kafka`) — слушает событие об успешном логине от auth-сервиса и создаёт уведомление о новом входе (см. «Интеграция с auth (Kafka)»)
 - Асинхронная отправка через набор `Sender` (`console`, `email`, `telegram`)
 - Хранение в PostgreSQL, схема БД версионируется миграциями (`cmd/migrate`)
 - Аутентификация по JWT (заголовок `Authorization: Bearer <token>`), токен выдаёт отдельный auth-сервис (`services/auth`) и подписывает общим `JWT_SECRET`
@@ -20,9 +21,10 @@
 - Go 1.27, монорепозиторий из трёх модулей, объединённых [Go workspace](https://go.dev/ref/mod#workspaces) (`go.work`):
   - `notifier` — этот сервис (модуль в корне репозитория)
   - `services/auth` (модуль `authservice`) — регистрация, логин, выдача JWT
-  - `contracts` — общий gRPC-контракт notifier ↔ auth: `.proto` и сгенерированный код, отдельный модуль, чтобы auth не зависел от всего модуля `notifier` целиком
+  - `contracts` — общие контракты notifier ↔ auth: gRPC (`.proto` + сгенерированный код) и Kafka-события (`events/`), отдельный модуль, чтобы auth не зависел от всего модуля `notifier` целиком
 - PostgreSQL (драйвер `jackc/pgx/v5`)
 - gRPC (`google.golang.org/grpc`) и Protocol Buffers — межсервисный вызов auth → notifier
+- Kafka (`github.com/segmentio/kafka-go`) — событие об успешном логине, auth → notifier
 - `golang.org/x/time/rate` — rate limiting
 
 ## Быстрый старт
@@ -34,7 +36,7 @@ cp .env.example .env
 make docker-up
 ```
 
-Поднимутся `postgres`, разовый `migrate` (применяет миграции схемы и завершается) и `notifier`, который стартует только после его успешного завершения (`depends_on: condition: service_completed_successfully`), а также зеркальный набор для auth-сервиса — `postgres_auth`, `auth_migrate`, `auth`. Notifier будет доступен на `http://localhost:8080` (HTTP) и `localhost:9090` (gRPC), auth — на `http://localhost:8081`. Оба сервиса используют общий `JWT_SECRET`: auth подписывает им токены, notifier проверяет подпись. Между `auth` и `notifier` намеренно нет `depends_on` — недоступность notifier в момент старта auth не критична, см. «Интеграция с auth (gRPC)».
+Поднимутся `postgres`, разовый `migrate` (применяет миграции схемы и завершается), `kafka` и `notifier`, который стартует только после успешного завершения `migrate` (`depends_on: condition: service_completed_successfully`) и готовности `kafka`, а также зеркальный набор для auth-сервиса — `postgres_auth`, `auth_migrate`, `auth`. Notifier будет доступен на `http://localhost:8080` (HTTP) и `localhost:9090` (gRPC), auth — на `http://localhost:8081`. Оба сервиса используют общий `JWT_SECRET`: auth подписывает им токены, notifier проверяет подпись. Между `auth` и `notifier` намеренно нет `depends_on` — недоступность notifier в момент старта auth не критична, см. «Интеграция с auth (gRPC)»; оба сервиса, однако, ждут готовности `kafka`, так как продюсер и консьюмер устанавливают соединение с брокером при старте.
 
 > Образы `auth`/`auth_migrate` собираются из **корня репозитория** (`context: .` в `docker-compose.yml`), а не из `services/auth` — потому что `authservice` импортирует пакет из модуля `contracts` через `go.work`, а Go workspace требует, чтобы все перечисленные в нём модули физически лежали рядом на диске в момент сборки. Если правите `services/auth/Dockerfile`, помните, что пути внутри него — относительно корня репозитория, а не `services/auth`.
 
@@ -90,13 +92,15 @@ make docker-up ENV_FILE=.env.prod
 | `RD_HOST` | Хост Redis | `localhost` |
 | `RD_PORT` | Порт Redis | `6379` |
 | `RD_PASSWORD` | Пароль Redis | `notifier` |
+| `KAFKA_BROKERS` | Адреса брокеров Kafka через запятую (см. «Интеграция с auth (Kafka)») | `kafka:9092` |
 | `APP_HOST_PORT` | Порт сервиса, публикуемый на хосте (только docker compose) | `8080` |
 | `NOTIFIER_GRPC_PORT` | gRPC-порт внутри docker-сети — им же auth находит notifier как `notifier:$NOTIFIER_GRPC_PORT` (только docker compose) | `9090` |
 | `NOTIFIER_GRPC_HOST_PORT` | gRPC-порт, публикуемый на хосте — удобно для проверки через `grpcurl` (только docker compose) | `9090` |
 | `POSTGRES_HOST_PORT` | Порт Postgres, публикуемый на хосте (только docker compose) | `5432` |
 | `REDIS_HOST_PORT` | Порт Redis, публикуемый на хосте (только docker compose) | `6379` |
+| `KAFKA_HOST_PORT` | Порт Kafka, публикуемый на хосте (только docker compose) | `9092` |
 
-Внутри docker-сети адрес БД и Redis всегда `postgres:5432` и `redis:6379` соответственно — это топология compose, а не настраиваемый параметр.
+Внутри docker-сети адрес БД, Redis и Kafka всегда `postgres:5432`, `redis:6379` и `kafka:9092` соответственно — это топология compose, а не настраиваемый параметр. Значение по умолчанию `KAFKA_BROKERS=kafka:9092` рассчитано именно на запуск внутри docker-сети; для `make run` на хосте задайте в `.env` `KAFKA_BROKERS=localhost:9092` (см. `.env.example`).
 
 ## Интеграция с auth (gRPC)
 
@@ -127,6 +131,48 @@ contracts/
 ```bash
 grpcurl -plaintext -d '{"recipient":"test@mail.com","subject":"hi","body":"hi","channel":"email"}' \
   localhost:9090 notifications.v1.NotificationService/CreateNotification
+```
+
+## Интеграция с auth (Kafka)
+
+При успешном логине auth-сервис публикует в Kafka событие `auth.user.logged_in`, а notifier асинхронно читает его и создаёт уведомление о новом входе в аккаунт. В отличие от интеграции при регистрации (прямой gRPC-вызов, см. выше), здесь сервисы не знают друг о друге напрямую — оба общаются только с брокером Kafka, поэтому auth может публиковать событие, даже если notifier в этот момент не работает: сообщение просто подождёт в топике.
+
+**Контракт.** Топик и структура события — Go-пакет `contracts/events/auth/v1` (не protobuf: событие сериализуется в JSON, что проще читать при отладке через `kafka-ui`/консольные консьюмеры и не требует Schema Registry для одного потребителя):
+
+```go
+const TopicUserLoggedIn = "auth.user.logged_in"
+
+type UserLoggedIn struct {
+    UserID     uuid.UUID `json:"user_id"`
+    Email      string    `json:"email"`
+    OccurredAt time.Time `json:"occurred_at"`
+}
+```
+
+**Реализация:**
+
+| Сторона | Код |
+|---|---|
+| Kafka-продюсер (auth) | `services/auth/internal/client/kafkaproducer/` — реализует порт `service.EventPublisher` (`services/auth/internal/service/event_publisher.go`), поэтому `AuthService` не знает о деталях транспорта |
+| Kafka-консьюмер (notifier) | `internal/transport/kafka/login_consumer.go` — читает топик через consumer group `notifier-login-consumer`, десериализует событие и вызывает `service.NotificationService.Create`, как и HTTP/gRPC-хендлеры |
+| Точка вызова | `AuthService.Login` (`services/auth/internal/service/auth_service.go`) — после выпуска пары токенов |
+
+Сообщение партиционируется по `UserID` (`kafka.Hash` балансировщик в продюсере) — это гарантирует, что события одного пользователя обрабатываются в том порядке, в котором были опубликованы.
+
+**Consumer group.** `GroupID: "notifier-login-consumer"` в `kafka.ReaderConfig` — ключевой момент: Kafka сохраняет offset (позицию последнего прочитанного сообщения) для этой группы. Если notifier перезапустится, он продолжит чтение с того места, где остановился, а не прочитает всё заново и не потеряет события, пришедшие, пока сервис был недоступен. При масштабировании notifier до нескольких реплик Kafka автоматически распределит партиции топика между ними так, что каждое сообщение обработает только одна реплика.
+
+**Тот же trade-off, что и с письмом при регистрации.** Публикация события в `AuthService.publishLoginEvent` выполняется в фоновой горутине со своим контекстом и таймаутом, не блокируя ответ `Login`; ошибка публикации только логируется. Симметрично, консьюмер в notifier не роняет процесс при ошибке разбора одного сообщения (`json.Unmarshal`) или при сбое `NotificationService.Create` — он логирует ошибку и переходит к следующему сообщению, чтобы одно «плохое» событие не заблокировало обработку всех остальных.
+
+**Проверить вручную:**
+
+```bash
+# залогиниться под существующим пользователем
+curl -s -X POST http://localhost:8081/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "supersecret"}'
+
+# посмотреть, что notifier создал уведомление о новом входе
+curl http://localhost:8080/api/v1/notifications -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Кэширование (Redis)
@@ -244,10 +290,10 @@ make help
 ```
 .                 этот сервис — корень репозитория и есть модуль notifier
 services/auth/    auth-сервис — модуль authservice, регистрация/логин/JWT
-contracts/        общий gRPC-контракт notifier ↔ auth — модуль contracts
+contracts/        общие контракты notifier ↔ auth (gRPC и Kafka-события) — модуль contracts
 ```
 
-Каждый модуль собирается и тестируется независимо (`go build`/`go test` внутри своей директории), но `go.work` позволяет `authservice` импортировать `contracts` напрямую, без публикации в отдельный реестр модулей — см. «Интеграция с auth (gRPC)».
+Каждый модуль собирается и тестируется независимо (`go build`/`go test` внутри своей директории), но `go.work` позволяет `authservice` импортировать `contracts` напрямую, без публикации в отдельный реестр модулей — см. «Интеграция с auth (gRPC)» и «Интеграция с auth (Kafka)».
 
 Внутри `notifier` — слоистая архитектура: транспорт знает про сервис, сервис — про репозиторий и домен, домен не знает ни о ком.
 
@@ -255,6 +301,7 @@ contracts/        общий gRPC-контракт notifier ↔ auth — мод�
 cmd/notifier/              composition root: конфигурация, wiring зависимостей, запуск/graceful shutdown
 internal/transport/http/   HTTP-транспорт: роутинг, middleware, хендлеры, DTO запросов/ответов
 internal/transport/grpc/   gRPC-транспорт: сервер NotificationService для межсервисных вызовов (см. auth)
+internal/transport/kafka/  Kafka-консьюмер: чтение события auth.user.logged_in (см. auth)
 internal/service/          бизнес-логика: валидация, оркестрация отправки, экспорт, health-check
 internal/repository/       доступ к данным (Postgres и in-memory реализации интерфейса Repository)
 internal/notification/     доменная модель уведомления и валидация

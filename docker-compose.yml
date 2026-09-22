@@ -100,6 +100,11 @@ services:
       RD_HOST: redis
       RD_PORT: 6379
       RD_PASSWORD: ${RD_PASSWORD:-notifier}
+      # Kafka
+      # Внутри docker-сети адрес брокера всегда kafka:9092 — та же
+      # топология compose, что и у PG_HOST/RD_HOST выше, а не
+      # настраиваемый параметр.
+      KAFKA_BROKERS: kafka:9092
     ports:
       - "${APP_HOST_PORT:-8080}:${PORT:-8080}"
       - "${NOTIFIER_GRPC_HOST_PORT:-9090}:${NOTIFIER_GRPC_PORT:-9090}"
@@ -175,6 +180,9 @@ services:
       PG_PASSWORD: ${AUTH_PG_PASSWORD:-auth}
       PG_DBNAME: ${AUTH_PG_DBNAME:-auth}
       PG_SSLMODE: ${AUTH_PG_SSLMODE:-disable}
+      # Внутри docker-сети адрес брокера всегда kafka:9092 — см. комментарий
+      # к аналогичной переменной сервиса notifier выше.
+      KAFKA_BROKERS: kafka:9092
     ports:
       - "${AUTH_APP_HOST_PORT:-8081}:${AUTH_PORT:-8081}"
 

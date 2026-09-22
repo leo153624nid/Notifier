@@ -16,6 +16,7 @@ import (
 	"authservice/internal/domain"
 	"authservice/internal/repository"
 	"authservice/internal/service"
+	"uuid"
 )
 
 type fakeDbPinger struct {
@@ -33,6 +34,16 @@ func (f fakeDbPinger) Ping(context.Context) error {
 type mockNotifierClient struct{}
 
 func (mockNotifierClient) Notify(context.Context, string) error {
+	return nil
+}
+
+// mockEventPublisher — тестовая заглушка service.EventPublisher, по тем же
+// причинам, что и mockNotifierClient выше: нулевое значение настоящего
+// kafkaproducer.Producer паникует при использовании, а HTTP-тестам сам факт
+// публикации события логина не важен.
+type mockEventPublisher struct{}
+
+func (mockEventPublisher) PublishUserLoggedInEvent(context.Context, uuid.UUID, string) error {
 	return nil
 }
 
@@ -56,8 +67,9 @@ func newTestHandler(
 	repo := newMockMemoryRepository(existEmail)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	notifierClient := mockNotifierClient{}
+	eventPublisher := mockEventPublisher{}
 
-	auth, err := service.NewAuthService(repo, logger, "secret", 10*time.Minute, 24*time.Hour, notifierClient)
+	auth, err := service.NewAuthService(repo, logger, "secret", 10*time.Minute, 24*time.Hour, notifierClient, eventPublisher)
 	if err != nil {
 		t.Fatalf("NewAuthService() error: %s", err)
 	}

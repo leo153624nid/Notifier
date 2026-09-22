@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+	"uuid"
 
 	"authservice/internal/domain"
 	"authservice/internal/repository"
+	authevents "contracts/events/auth/v1"
 )
 
 // mockNotifierClient — тестовая заглушка NotifierClient. В отличие от
@@ -40,6 +42,31 @@ func (m *mockNotifierClient) callsSnapshot() []string {
 	return append([]string(nil), m.calls...)
 }
 
+// mockEventPublisher — тестовая заглушка EventPublisher. Как и
+// mockNotifierClient, безопасна для прямого использования в тестах (в
+// отличие от нулевого значения настоящего kafkaproducer.Producer, у
+// которого writer == nil) и позволяет проверить сам факт публикации.
+type mockEventPublisher struct {
+	mu    sync.Mutex
+	calls []authevents.UserLoggedIn
+	err   error
+}
+
+func (m *mockEventPublisher) PublishUserLoggedInEvent(_ context.Context, userID uuid.UUID, email string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.calls = append(m.calls, authevents.UserLoggedIn{UserID: userID, Email: email})
+	return m.err
+}
+
+func (m *mockEventPublisher) callsSnapshot() []authevents.UserLoggedIn {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return append([]authevents.UserLoggedIn(nil), m.calls...)
+}
+
 func newMockMemoryRepository(email string) *repository.MemoryRepository {
 	existUser := domain.User{
 		Email: email,
@@ -53,13 +80,28 @@ func newMockMemoryRepository(email string) *repository.MemoryRepository {
 func newTestAuthService(t *testing.T, repo repository.UserRepo) *AuthService {
 	t.Helper()
 
-	return newTestAuthServiceWithNotifier(t, repo, &mockNotifierClient{})
+	return newTestAuthServiceWithDeps(t, repo, &mockNotifierClient{}, &mockEventPublisher{})
 }
 
 // newTestAuthServiceWithNotifier — как newTestAuthService, но с конкретным
 // NotifierClient — нужен тестам, которые проверяют сам факт/результат
 // вызова Notify (TestRegister_Notifies*).
 func newTestAuthServiceWithNotifier(t *testing.T, repo repository.UserRepo, notifier NotifierClient) *AuthService {
+	t.Helper()
+
+	return newTestAuthServiceWithDeps(t, repo, notifier, &mockEventPublisher{})
+}
+
+// newTestAuthServiceWithEvents — как newTestAuthService, но с конкретным
+// EventPublisher — нужен тестам, которые проверяют сам факт/результат
+// публикации события логина (TestLogin_Publishes*).
+func newTestAuthServiceWithEvents(t *testing.T, repo repository.UserRepo, events EventPublisher) *AuthService {
+	t.Helper()
+
+	return newTestAuthServiceWithDeps(t, repo, &mockNotifierClient{}, events)
+}
+
+func newTestAuthServiceWithDeps(t *testing.T, repo repository.UserRepo, notifier NotifierClient, events EventPublisher) *AuthService {
 	t.Helper()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -70,6 +112,7 @@ func newTestAuthServiceWithNotifier(t *testing.T, repo repository.UserRepo, noti
 		10*time.Minute,
 		24*time.Hour,
 		notifier,
+		events,
 	)
 	if err != nil {
 		t.Fatalf("NewAuthService() failed: %s", err)
@@ -85,6 +128,7 @@ func TestNewAuthService(t *testing.T) {
 	accessTTL := 10 * time.Minute
 	refreshTTL := 24 * time.Hour
 	notifierClient := &mockNotifierClient{}
+	eventPublisher := &mockEventPublisher{}
 
 	tests := []struct {
 		name    string
@@ -96,6 +140,8 @@ func TestNewAuthService(t *testing.T) {
 		{name: "no secret", wantErr: true},
 		{name: "no access ttl", wantErr: true},
 		{name: "no refresh ttl", wantErr: true},
+		{name: "no notifier", wantErr: true},
+		{name: "no events", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -103,17 +149,21 @@ func TestNewAuthService(t *testing.T) {
 			var err error
 			switch tt.name {
 			case "no repo":
-				_, err = NewAuthService(nil, logger, secret, accessTTL, refreshTTL, notifierClient)
+				_, err = NewAuthService(nil, logger, secret, accessTTL, refreshTTL, notifierClient, eventPublisher)
 			case "no logger":
-				_, err = NewAuthService(repo, nil, secret, accessTTL, refreshTTL, notifierClient)
+				_, err = NewAuthService(repo, nil, secret, accessTTL, refreshTTL, notifierClient, eventPublisher)
 			case "no secret":
-				_, err = NewAuthService(repo, logger, "", accessTTL, refreshTTL, notifierClient)
+				_, err = NewAuthService(repo, logger, "", accessTTL, refreshTTL, notifierClient, eventPublisher)
 			case "no access ttl":
-				_, err = NewAuthService(repo, logger, secret, 0, refreshTTL, notifierClient)
+				_, err = NewAuthService(repo, logger, secret, 0, refreshTTL, notifierClient, eventPublisher)
 			case "no refresh ttl":
-				_, err = NewAuthService(repo, logger, secret, accessTTL, 0, notifierClient)
+				_, err = NewAuthService(repo, logger, secret, accessTTL, 0, notifierClient, eventPublisher)
+			case "no notifier":
+				_, err = NewAuthService(repo, logger, secret, accessTTL, refreshTTL, nil, eventPublisher)
+			case "no events":
+				_, err = NewAuthService(repo, logger, secret, accessTTL, refreshTTL, notifierClient, nil)
 			default:
-				_, err = NewAuthService(repo, logger, secret, accessTTL, refreshTTL, notifierClient)
+				_, err = NewAuthService(repo, logger, secret, accessTTL, refreshTTL, notifierClient, eventPublisher)
 			}
 
 			if err != nil && !tt.wantErr {
@@ -354,6 +404,69 @@ func TestLogin(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestLogin_PublishesLoginEventOnSuccess проверяет, что успешный логин
+// асинхронно публикует событие auth.user.logged_in с ID и email вошедшего
+// пользователя. s.Wait() дожидается завершения фоновой горутины
+// publishLoginEvent — без этого проверка calls была бы гонкой (см.
+// AuthService.Login).
+func TestLogin_PublishesLoginEventOnSuccess(t *testing.T) {
+	existEmail := "exist@mail.com"
+	existPassword := "12345678"
+
+	repo := repository.NewMemoryRepository()
+	events := &mockEventPublisher{}
+	s := newTestAuthServiceWithEvents(t, repo, events)
+
+	u, err := s.Register(context.Background(), existEmail, existPassword, "req-register")
+	if err != nil {
+		t.Fatalf("Register() error: %s", err)
+	}
+	s.Wait()
+	events.calls = nil // сбрасываем: Register не публикует событие логина
+
+	if _, err := s.Login(context.Background(), existEmail, existPassword); err != nil {
+		t.Fatalf("Login() error: %s", err)
+	}
+
+	s.Wait()
+
+	calls := events.callsSnapshot()
+	if len(calls) != 1 {
+		t.Fatalf("PublishUserLoggedInEvent calls = %v, want exactly one call", calls)
+	}
+	if calls[0].UserID != u.ID || calls[0].Email != existEmail {
+		t.Errorf("PublishUserLoggedInEvent call = %+v, want user_id=%s email=%s", calls[0], u.ID, existEmail)
+	}
+}
+
+// TestLogin_SucceedsEvenIfPublishFails фиксирует то же архитектурное
+// решение, что и TestRegister_SucceedsEvenIfNotifyFails: публикация
+// события логина — сайд-эффект, а не часть транзакции логина. Сбой
+// публикации не должен приводить к ошибке Login.
+func TestLogin_SucceedsEvenIfPublishFails(t *testing.T) {
+	existEmail := "exist@mail.com"
+	existPassword := "12345678"
+
+	repo := repository.NewMemoryRepository()
+	events := &mockEventPublisher{err: errors.New("kafka unavailable")}
+	s := newTestAuthServiceWithEvents(t, repo, events)
+
+	if _, err := s.Register(context.Background(), existEmail, existPassword, "req-register"); err != nil {
+		t.Fatalf("Register() error: %s", err)
+	}
+	s.Wait()
+
+	pair, err := s.Login(context.Background(), existEmail, existPassword)
+	if err != nil {
+		t.Fatalf("Login() error: %s, want nil even though publish fails", err)
+	}
+	if utf8.RuneCountInString(pair.AccessToken) == 0 {
+		t.Errorf("empty access token")
+	}
+
+	s.Wait()
 }
 
 func TestDelete(t *testing.T) {
