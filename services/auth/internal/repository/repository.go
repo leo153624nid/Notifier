@@ -10,6 +10,7 @@ import (
 type UserRepo interface {
 	Create(ctx context.Context, u domain.User) (uuid.UUID, error)
 	GetByEmail(ctx context.Context, email string) (domain.User, error)
+	Delete(ctx context.Context, userID uuid.UUID) error
 
 	CreateRefreshToken(ctx context.Context, rt domain.RefreshToken) error
 	GetRefreshToken(ctx context.Context, tokenHash string) (domain.RefreshToken, error)

@@ -72,6 +72,26 @@ func (r *PostgresRepository) GetByEmail(ctx context.Context, email string) (doma
 	return u, nil
 }
 
+func (r *PostgresRepository) Delete(ctx context.Context, userID uuid.UUID) error {
+	const op = "PostgresRepository.Delete"
+
+	result, err := r.db.Exec(
+		ctx,
+		`Delete
+		FROM users WHERE id=$1`,
+		userID,
+	)
+	if err != nil {
+		return fmt.Errorf("%s: delete: %w", op, err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("%s: delete: %w", op, domain.ErrNotFound)
+	}
+
+	return nil
+}
+
 func (r *PostgresRepository) CreateRefreshToken(ctx context.Context, rt domain.RefreshToken) error {
 	const op = "PostgresRepository.CreateRefreshToken"
 

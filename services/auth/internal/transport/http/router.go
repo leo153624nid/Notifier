@@ -24,6 +24,7 @@ func NewRouter(h *Handler, logger *slog.Logger) *Router {
 	mux.Handle("POST /api/v1/auth/login", rateLimit(http.HandlerFunc(h.loginUser)))
 	mux.Handle("POST /api/v1/auth/refresh", rateLimit(http.HandlerFunc(h.refreshToken)))
 	mux.Handle("POST /api/v1/auth/logout", rateLimit(http.HandlerFunc(h.logoutUser)))
+	mux.Handle("DELETE /api/v1/auth/delete", rateLimit(http.HandlerFunc(h.deleteUser)))
 
 	handler := requestID(loggingRecoverMiddleware(logger)(contentType(mux)))
 

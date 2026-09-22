@@ -209,6 +209,34 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (TokenP
 	return pair, nil
 }
 
+func (s *AuthService) Delete(ctx context.Context, refreshToken string) error {
+	const op = "AuthService.Delete"
+
+	if refreshToken == "" {
+		return domain.ErrInvalidToken
+	}
+
+	claims, err := token.Parse(refreshToken, s.jwtSecret)
+	if err != nil {
+		return domain.ErrInvalidToken
+	}
+	if claims.Type != token.TypeRefresh {
+		return domain.ErrInvalidToken
+	}
+
+	logErr := s.Logout(ctx, refreshToken)
+	if logErr != nil {
+		return fmt.Errorf("%s: %w", op, logErr)
+	}
+
+	delErr := s.repo.Delete(ctx, claims.UserID)
+	if delErr != nil {
+		return fmt.Errorf("%s: %w", op, delErr)
+	}
+
+	return nil
+}
+
 // Refresh обменивает действующий refresh-токен на новую пару токенов.
 // Использованный refresh-токен сразу отзывается (ротация) — повторное
 // его предъявление больше не сработает.

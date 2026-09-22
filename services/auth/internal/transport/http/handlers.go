@@ -127,6 +127,42 @@ func (h *Handler) loginUser(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(js)
 }
 
+func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
+	const op = "Handler.deleteUser"
+
+	var req RefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		SendJSONError(w, "invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	if logErr := h.auth.Logout(r.Context(), req.RefreshToken); logErr != nil {
+		switch {
+		case errors.Is(logErr, domain.ErrInvalidToken):
+			SendJSONError(w, "invalid refresh token", http.StatusBadRequest)
+		default:
+			h.logger.Error("logout user failed", "op", op, "error", logErr)
+			SendJSONError(w, "internal error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if delErr := h.auth.Delete(r.Context(), req.RefreshToken); delErr != nil {
+		switch {
+		case errors.Is(delErr, domain.ErrInvalidCredentials):
+			SendJSONError(w, "invalid email", http.StatusBadRequest)
+		case errors.Is(delErr, domain.ErrNotFound):
+			SendJSONError(w, domain.ErrNotFound.Error(), http.StatusNotFound)
+		default:
+			h.logger.Error("delete user failed", "op", op, "error", delErr)
+			SendJSONError(w, "internal error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) refreshToken(w http.ResponseWriter, r *http.Request) {
 	const op = "Handler.refreshToken"
 

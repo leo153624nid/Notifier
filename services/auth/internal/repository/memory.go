@@ -57,6 +57,29 @@ func (r *MemoryRepository) GetByEmail(_ context.Context, email string) (domain.U
 	return u, nil
 }
 
+func (r *MemoryRepository) Delete(_ context.Context, userID uuid.UUID) error {
+	const op = "MemoryRepository.Delete"
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var email string
+	for _, user := range r.users {
+		if user.ID == userID {
+			email = user.Email
+		}
+	}
+
+	_, ok := r.users[email]
+	if !ok {
+		return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
+	}
+
+	delete(r.users, email)
+
+	return nil
+}
+
 func (r *MemoryRepository) CreateRefreshToken(_ context.Context, rt domain.RefreshToken) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
