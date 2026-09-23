@@ -145,6 +145,7 @@ func main() {
 	)
 
 	// MARK: - Start consumers
+	logger.Info("starting consumers")
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
 	go loginConsumer.Run(consumerCtx)
 

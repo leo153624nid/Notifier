@@ -54,6 +54,10 @@ func (c *LoginConsumer) Run(ctx context.Context) {
 
 		if err := c.handleMessage(ctx, msg.Value); err != nil {
 			c.logger.Error("handle message failed", "op", op, "error", err)
+			continue
+		}
+		if err := c.reader.CommitMessages(ctx, msg); err != nil {
+			c.logger.Error("failed to commit msg", "op", op, "error", err)
 		}
 	}
 }
