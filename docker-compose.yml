@@ -78,6 +78,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
     environment:
@@ -163,6 +165,8 @@ services:
         condition: service_healthy
       auth_migrate:
         condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
       kafka:
         condition: service_healthy
     environment:
@@ -223,6 +227,12 @@ services:
       # Не ждать 3 секунды перед первой ребалансировкой группы — в dev
       # участник всегда один.
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Топики создаёт только kafka-init (см. ниже), с нужным числом
+      # партиций и replication factor. Без этой настройки брокер создал бы
+      # топик сам при первой записи/подписке — с дефолтными параметрами
+      # (обычно 1 партиция) — если что-то обратится к нему раньше kafka-init
+      # или опечатается в имени; тогда явное создание ничего не гарантирует.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     ports:
       - "${KAFKA_HOST_PORT:-9092}:19092"
     healthcheck:
@@ -230,6 +240,28 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+
+  kafka-init:
+    # Явное создание топиков вместо auto.create.topics.enable (выключен у
+    # сервиса kafka выше) — так задаём число партиций и replication factor
+    # сразу, а не то, что подставил бы брокер по умолчанию.
+    #
+    # Список топиков не захардкожен ни здесь, ни в scripts/kafka-init.sh —
+    # его печатает бинарник /kafkatopics (cmd/kafkatopics), собранный в
+    # Dockerfile.kafkainit; он берёт имена из internal/config, которая, в
+    # свою очередь, берёт дефолты из contracts/events/auth/v1. Так
+    # единственный источник истины об именах топиков — Go-код.
+    build:
+      context: .
+      dockerfile: Dockerfile.kafkainit
+    image: notifier-kafka-init
+    container_name: notifier_kafka_init
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVER: kafka:9092
 
 volumes:
   pgdata:

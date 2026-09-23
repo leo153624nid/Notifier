@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	authevents "contracts/events/auth/v1"
 	"notifier/internal/domain"
@@ -14,30 +15,57 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
+// messageWriter — часть API *kafka.Writer, нужная для отправки в DLQ;
+// messageReader — часть API *kafka.Reader, нужная для основного цикла.
+// Обе выделены в интерфейсы, чтобы подставлять моки в тестах без сетевого
+// брокера.
+type messageWriter interface {
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
+}
+
+type messageReader interface {
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
+}
+
 type LoginConsumer struct {
-	reader  *kafka.Reader
-	service *service.NotificationService
-	logger  *slog.Logger
-	groupID string
+	reader    messageReader
+	dlqWriter messageWriter
+	service   *service.NotificationService
+	logger    *slog.Logger
+	groupID   string
 }
 
 func NewLoginConsumer(
 	brokers []string,
+	loginTopic string,
 	groupID string,
+	dlqTopic string,
 	service *service.NotificationService,
 	logger *slog.Logger,
 ) *LoginConsumer {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: brokers,
-		Topic:   authevents.TopicUserLoggedIn,
+		Topic:   loginTopic,
 		GroupID: groupID,
 	})
 
+	dlqWriter := &kafka.Writer{
+		Addr:         kafka.TCP(brokers...),
+		Topic:        dlqTopic,
+		Balancer:     &kafka.Hash{},
+		RequiredAcks: kafka.RequireOne,
+		WriteTimeout: 5 * time.Second,
+	}
+
 	return &LoginConsumer{
-		reader:  reader,
-		service: service,
-		logger:  logger,
-		groupID: groupID,
+		reader:    reader,
+		dlqWriter: dlqWriter,
+		service:   service,
+		logger:    logger,
+		groupID:   groupID,
 	}
 }
 
@@ -57,7 +85,11 @@ func (c *LoginConsumer) Run(ctx context.Context) {
 
 		if err := c.handleMessage(ctx, msg.Value); err != nil {
 			c.logger.Error("handle message failed", "op", op, "error", err)
-			continue
+
+			if dlqErr := c.sendToDLQ(ctx, msg, err); dlqErr != nil {
+				c.logger.Error("failed to send msg to dlq", "op", op, "error", dlqErr)
+				continue
+			}
 		}
 		if err := c.reader.CommitMessages(ctx, msg); err != nil {
 			c.logger.Error("failed to commit msg", "op", op, "error", err)
@@ -96,5 +128,21 @@ func (c *LoginConsumer) handleMessage(ctx context.Context, value []byte) error {
 }
 
 func (c *LoginConsumer) Close() error {
+	if err := c.dlqWriter.Close(); err != nil {
+		return fmt.Errorf("close dlq writer: %w", err)
+	}
 	return c.reader.Close()
+}
+
+// sendToDLQ переносит недоставленное сообщение в dead-letter топик,
+// сохраняя причину ошибки в заголовке, чтобы её можно было разобрать позже.
+func (c *LoginConsumer) sendToDLQ(ctx context.Context, msg kafka.Message, cause error) error {
+	return c.dlqWriter.WriteMessages(ctx, kafka.Message{
+		Key:   msg.Key,
+		Value: msg.Value,
+		Headers: []kafka.Header{
+			{Key: "error", Value: []byte(cause.Error())},
+			{Key: "source_topic", Value: []byte(msg.Topic)},
+		},
+	})
 }

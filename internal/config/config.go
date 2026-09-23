@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strings"
 )
 
 type Config struct {
@@ -14,7 +13,7 @@ type Config struct {
 	JWTSecret    string
 	AuditLogPath string
 	RedisCfg     RedisConfig
-	KafkaBrokers []string
+	KafkaCfg     KafkaConfig
 }
 
 func Load() (Config, error) {
@@ -25,7 +24,7 @@ func Load() (Config, error) {
 		LogLevel:     "info",
 		AuditLogPath: "audit.log",
 		RedisCfg:     LoadRedisConfig(),
-		KafkaBrokers: []string{"kafka:9092"},
+		KafkaCfg:     LoadKafkaConfig(),
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
@@ -39,9 +38,6 @@ func Load() (Config, error) {
 	}
 	if v := os.Getenv("AUDIT_LOG_PATH"); v != "" {
 		cfg.AuditLogPath = v
-	}
-	if v := os.Getenv("KAFKA_BROKERS"); v != "" {
-		cfg.KafkaBrokers = strings.Split(v, ",")
 	}
 
 	// Общий секрет с auth-сервисом: им notifier проверяет подпись JWT,

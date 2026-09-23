@@ -93,6 +93,9 @@ make docker-up ENV_FILE=.env.prod
 | `RD_PORT` | Порт Redis | `6379` |
 | `RD_PASSWORD` | Пароль Redis | `notifier` |
 | `KAFKA_BROKERS` | Адреса брокеров Kafka через запятую (см. «Интеграция с auth (Kafka)») | `kafka:9092` |
+| `KAFKA_LOGIN_TOPIC` | Топик, из которого notifier читает событие логина; переопределяет дефолт из `authevents.TopicUserLoggedIn` | `auth.user.logged_in` |
+| `KAFKA_LOGIN_GROUP_ID` | Consumer group для `KAFKA_LOGIN_TOPIC`; переопределяет дефолт из `authevents.GroupIDLoginConsumer` | `notifier-login-consumer` |
+| `KAFKA_DLQ_TOPIC` | Dead-letter топик для необработанных сообщений (см. «Dead-letter топик» ниже); переопределяет дефолт из `authevents.TopicNotifierDLQ` | `notifier.dlq` |
 | `APP_HOST_PORT` | Порт сервиса, публикуемый на хосте (только docker compose) | `8080` |
 | `NOTIFIER_GRPC_PORT` | gRPC-порт внутри docker-сети — им же auth находит notifier как `notifier:$NOTIFIER_GRPC_PORT` (только docker compose) | `9090` |
 | `NOTIFIER_GRPC_HOST_PORT` | gRPC-порт, публикуемый на хосте — удобно для проверки через `grpcurl` (только docker compose) | `9090` |
@@ -141,8 +144,11 @@ grpcurl -plaintext -d '{"recipient":"test@mail.com","subject":"hi","body":"hi","
 
 ```go
 const TopicUserLoggedIn = "auth.user.logged_in"
+const TopicNotifierDLQ = "notifier.dlq"
+const GroupIDLoginConsumer = "notifier-login-consumer"
 
 type UserLoggedIn struct {
+    EventID    uuid.UUID `json:"event_id"`
     UserID     uuid.UUID `json:"user_id"`
     Email      string    `json:"email"`
     OccurredAt time.Time `json:"occurred_at"`
@@ -161,7 +167,33 @@ type UserLoggedIn struct {
 
 **Consumer group.** `GroupID: "notifier-login-consumer"` в `kafka.ReaderConfig` — ключевой момент: Kafka сохраняет offset (позицию последнего прочитанного сообщения) для этой группы. Если notifier перезапустится, он продолжит чтение с того места, где остановился, а не прочитает всё заново и не потеряет события, пришедшие, пока сервис был недоступен. При масштабировании notifier до нескольких реплик Kafka автоматически распределит партиции топика между ними так, что каждое сообщение обработает только одна реплика.
 
-**Тот же trade-off, что и с письмом при регистрации.** Публикация события в `AuthService.publishLoginEvent` выполняется в фоновой горутине со своим контекстом и таймаутом, не блокируя ответ `Login`; ошибка публикации только логируется. Симметрично, консьюмер в notifier не роняет процесс при ошибке разбора одного сообщения (`json.Unmarshal`) или при сбое `NotificationService.Create` — он логирует ошибку и переходит к следующему сообщению, чтобы одно «плохое» событие не заблокировало обработку всех остальных.
+**Тот же trade-off, что и с письмом при регистрации.** Публикация события в `AuthService.publishLoginEvent` выполняется в фоновой горутине со своим контекстом и таймаутом, не блокируя ответ `Login`; ошибка публикации только логируется. Симметрично, консьюмер в notifier не роняет процесс при ошибке разбора одного сообщения (`json.Unmarshal`) или при сбое `NotificationService.Create` — он не даёт одному «плохому» событию заблокировать партицию (см. «Dead-letter топик» ниже).
+
+### Dead-letter топик
+
+Если `handleMessage` не смог обработать сообщение (невалидный JSON или ошибка `NotificationService.CreateIdempotent`, отличная от «уже обработано» — она не считается ошибкой и просто коммитится), сообщение не отбрасывается и не ретраится вечно на месте, а публикуется как есть в топик `notifier.dlq` (константа `authevents.TopicNotifierDLQ`, `contracts/events/auth/v1/login.go`) с заголовками `error` (текст ошибки) и `source_topic` (имя исходного топика) — после этого оффсет исходного топика коммитится, и консьюмер идёт дальше.
+
+Это разделяет два разных отказа:
+
+- **Сообщение необрабатываемо** (poison pill: битый JSON, доменная ошибка) — уходит в DLQ, оффсет двигается, партиция не блокируется.
+- **Сама Kafka недоступна** (не удалось записать в DLQ) — оффсет **не** коммитится, `Run()` переходит к следующей итерации `FetchMessage` и на следующем цикле получит то же сообщение снова — данные не теряются молча.
+
+**Один DLQ-топик на всё приложение**, а не по одному на консьюмер: сейчас есть только `LoginConsumer`, но и при появлении новых консьюмеров они будут писать сюда же, различая источник через заголовок `source_topic`. Это меньше топиков и consumer group'ов для администрирования; разбор сообщения начинается с чтения этого заголовка, а не с выбора, в какой из множества DLQ-топиков смотреть.
+
+**Создание топиков.** `auto.create.topics.enable` у брокера выключен (`docker-compose.yml`, сервис `kafka`) — без этого брокер создал бы отсутствующий топик сам при первом обращении, с дефолтными параметрами (обычно 1 партиция), что не даёт никаких гарантий по числу партиций/репликации. Вместо этого топики создаёт отдельный сервис `kafka-init`:
+
+```
+cmd/kafkatopics/        печатает "<topic>:<partitions>:<replication-factor>" по одной строке на топик;
+                        имена топиков берёт из internal/config (единственный источник —
+                        она сама берёт дефолты из contracts/events/auth/v1)
+scripts/kafka-init.sh   вызывает /kafkatopics и создаёт то, что он вывел, через kafka-topics.sh
+Dockerfile.kafkainit    собирает kafkatopics и кладёт его поверх образа apache/kafka
+                        вместе со scripts/kafka-init.sh
+```
+
+Список топиков не продублирован ни в YAML, ни в shell-скрипте — единственное место, где перечислены имена, это Go-код (`contracts` → `internal/config` → `cmd/kafkatopics`). `notifier` и `auth` в `docker-compose.yml` стартуют только после `kafka-init: service_completed_successfully`, поэтому оба топика (`auth.user.logged_in` и `notifier.dlq`) гарантированно существуют до первого подключения консьюмера/продюсера.
+
+Читать сообщения из DLQ и разбираться с ними — отдельная задача, пока не реализованная (см. план в PR/issue, если завели).
 
 **Проверить вручную:**
 
@@ -299,6 +331,7 @@ contracts/        общие контракты notifier ↔ auth (gRPC и Kafka
 
 ```
 cmd/notifier/              composition root: конфигурация, wiring зависимостей, запуск/graceful shutdown
+cmd/kafkatopics/           печатает список Kafka-топиков notifier для kafka-init (см. «Dead-letter топик»)
 internal/transport/http/   HTTP-транспорт: роутинг, middleware, хендлеры, DTO запросов/ответов
 internal/transport/grpc/   gRPC-транспорт: сервер NotificationService для межсервисных вызовов (см. auth)
 internal/transport/kafka/  Kafka-консьюмер: чтение события auth.user.logged_in (см. auth)
@@ -308,4 +341,5 @@ internal/notification/     доменная модель уведомления 
 internal/sender/           отправители уведомлений по каналам (console/email/telegram)
 internal/audit/            запись аудит-лога на диск
 internal/config/           загрузка конфигурации из окружения
+scripts/kafka-init.sh      создаёт Kafka-топики notifier при старте docker compose
 ```
