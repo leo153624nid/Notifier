@@ -12,15 +12,15 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-type Producer struct {
+type LoginProducer struct {
 	writer *kafka.Writer
 }
 
-func New(brokers []string, topic string) *Producer {
-	return &Producer{
+func NewLoginProducer(brokers []string) *LoginProducer {
+	return &LoginProducer{
 		writer: &kafka.Writer{
 			Addr:         kafka.TCP(brokers...),
-			Topic:        topic,
+			Topic:        authevents.TopicUserLoggedIn,
 			Balancer:     &kafka.Hash{},
 			RequiredAcks: kafka.RequireOne,
 			WriteTimeout: 5 * time.Second,
@@ -28,12 +28,16 @@ func New(brokers []string, topic string) *Producer {
 	}
 }
 
-func (p *Producer) CLose() error {
+func (p *LoginProducer) CLose() error {
 	return p.writer.Close()
 }
 
-func (p *Producer) PublishUserLoggedInEvent(ctx context.Context, userID uuid.UUID, email string) error {
-	const op = "Producer.PublishUserLoggedInEvent"
+func (p *LoginProducer) PublishUserLoggedInEvent(
+	ctx context.Context,
+	userID uuid.UUID,
+	email string,
+) error {
+	const op = "LoginProducer.PublishUserLoggedInEvent"
 
 	event := authevents.UserLoggedIn{
 		UserID:     userID,

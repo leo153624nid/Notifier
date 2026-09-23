@@ -20,7 +20,6 @@ import (
 	"authservice/internal/repository"
 	"authservice/internal/service"
 	transporthttp "authservice/internal/transport/http"
-	authevents "contracts/events/auth/v1"
 )
 
 const (
@@ -88,10 +87,7 @@ func main() {
 	}
 	defer notifierClient.Close()
 
-	events := kafkaproducer.New(
-		cfg.KafkaBrokers,
-		authevents.TopicUserLoggedIn,
-	)
+	events := kafkaproducer.NewLoginProducer(cfg.KafkaBrokers)
 	defer func() {
 		if err := events.CLose(); err != nil {
 			logger.Error("event publisher closing failed", "error", err)

@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	authevents "contracts/events/auth/v1"
 	"notifier/internal/audit"
 	"notifier/internal/cache"
 	"notifier/internal/config"
@@ -139,7 +140,7 @@ func main() {
 
 	loginConsumer := kafka.NewLoginConsumer(
 		cfg.KafkaBrokers,
-		"notifier-login-consumer",
+		authevents.LoginConsumerGroupID,
 		notificationService,
 		logger,
 	)

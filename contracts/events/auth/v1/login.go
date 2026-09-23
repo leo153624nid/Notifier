@@ -6,6 +6,7 @@ import (
 )
 
 const TopicUserLoggedIn = "auth.user.logged_in"
+const LoginConsumerGroupID = "notifier-login-consumer"
 
 type UserLoggedIn struct {
 	UserID     uuid.UUID `json:"user_id"`

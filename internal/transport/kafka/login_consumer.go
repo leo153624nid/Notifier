@@ -63,9 +63,7 @@ func (c *LoginConsumer) Run(ctx context.Context) {
 }
 
 // handleMessage разбирает одно Kafka-сообщение из топика auth.user.logged_in
-// и создаёт по нему уведомление. Вынесена из Run отдельно, чтобы её можно
-// было протестировать без реального брокера — Run отвечает только за цикл
-// чтения, handleMessage — за саму бизнес-обработку события.
+// и создаёт по нему уведомление.
 func (c *LoginConsumer) handleMessage(ctx context.Context, value []byte) error {
 	const op = "Consumer.handleMessage"
 
