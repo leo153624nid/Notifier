@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"uuid"
 
 	"notifier/internal/domain"
 )
 
 type MemoryRepository struct {
 	notifications map[int]domain.Notification
+	events        map[string]struct{}
 	nextID        int
 	mu            sync.Mutex
 }
@@ -19,6 +21,7 @@ type MemoryRepository struct {
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
 		notifications: make(map[int]domain.Notification),
+		events:        make(map[string]struct{}),
 		nextID:        0,
 	}
 }
@@ -27,6 +30,31 @@ func NewMemoryRepository() *MemoryRepository {
 func (r *MemoryRepository) Save(_ context.Context, n domain.Notification) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	r.nextID++
+	n.ID = r.nextID
+	n.Status = "pending"
+	r.notifications[n.ID] = n
+
+	return n.ID, nil
+}
+
+func (r *MemoryRepository) SaveIdempotent(
+	ctx context.Context,
+	consumer string,
+	eventID uuid.UUID,
+	n domain.Notification,
+) (int, error) {
+	const op = "MemoryRepository.SaveIdempotent"
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	eventKey := consumer + ":" + eventID.String()
+	if _, ok := r.events[eventKey]; ok {
+		return 0, fmt.Errorf("%s: %w", op, domain.ErrEventAlreadyProcessed)
+	}
+	r.events[eventKey] = struct{}{}
 
 	r.nextID++
 	n.ID = r.nextID

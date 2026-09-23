@@ -40,6 +40,7 @@ func (p *LoginProducer) PublishUserLoggedInEvent(
 	const op = "LoginProducer.PublishUserLoggedInEvent"
 
 	event := authevents.UserLoggedIn{
+		EventID:    uuid.New(),
 		UserID:     userID,
 		Email:      email,
 		OccurredAt: time.Now(),

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+	"uuid"
 
 	"github.com/redis/go-redis/v9"
 
@@ -44,6 +45,26 @@ func (r *CachedNotificationRepo) Save(ctx context.Context, n domain.Notification
 
 	if cacheErr := r.invalidateNotificationCache(ctx, id); cacheErr != nil {
 		r.logger.Warn("invalidate cache", "op", op, "error", cacheErr)
+	}
+
+	return id, nil
+}
+
+func (r *CachedNotificationRepo) SaveIdempotent(
+	ctx context.Context,
+	consumer string,
+	eventID uuid.UUID,
+	n domain.Notification,
+) (int, error) {
+	const op = "CachedNotificationRepo.SaveIdempotent"
+
+	id, err := r.repo.SaveIdempotent(ctx, consumer, eventID, n)
+	if err != nil {
+		return 0, fmt.Errorf("%s: save: %w", op, err)
+	}
+
+	if err := r.invalidateNotificationCache(ctx, id); err != nil {
+		r.logger.Warn("invalidate cache", "op", op, "error", err)
 	}
 
 	return id, nil

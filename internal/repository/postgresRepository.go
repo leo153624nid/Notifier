@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"uuid"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,6 +39,58 @@ func (r *PostgresRepository) Save(ctx context.Context, n domain.Notification) (i
 	).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("%s: scan: %w", op, err)
+	}
+
+	return id, nil
+}
+
+func (r *PostgresRepository) SaveIdempotent(
+	ctx context.Context,
+	consumer string,
+	eventID uuid.UUID,
+	n domain.Notification,
+) (int, error) {
+	const op = "PostgresRepository.SaveIdempotent"
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("%s: begin: %w", op, err)
+	}
+	defer func() {
+		if rollErr := tx.Rollback(ctx); rollErr != nil {
+			r.logger.Error("rollback failed", "op", op, "error", rollErr)
+		}
+	}()
+
+	tag, err := tx.Exec(
+		ctx,
+		`INSERT INTO processed_events 
+		(consumer, event_id) VALUES ($1, $2)
+		ON CONFLICT DO NOTHING`,
+		consumer, eventID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("%s: insert processed_events: %w", op, err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		return 0, fmt.Errorf("%s: %w", op, domain.ErrEventAlreadyProcessed)
+	}
+
+	var id int
+	err = tx.QueryRow(
+		ctx,
+		`INSERT INTO notifications (recipient, subject, body, channel, is_urgent, status)
+		VALUES ($1, $2, $3, $4, $5, 'pending')
+		RETURNING id`,
+		n.Recipient, n.Subject, n.Body, n.Channel, n.IsUrgent,
+	).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("%s: scan: %w", op, err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("%s: commit: %w", op, err)
 	}
 
 	return id, nil

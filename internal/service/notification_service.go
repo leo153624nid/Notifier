@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
+	"uuid"
 
 	"notifier/internal/audit"
 	"notifier/internal/domain"
@@ -112,6 +114,43 @@ func (s *NotificationService) sendAndUpdateStatus(
 	if err := s.repo.UpdateStatus(updateCtx, n.ID, status); err != nil {
 		reqLogger.Error("update status failed", "id", n.ID, "error", err)
 	}
+}
+
+func (s *NotificationService) CreateIdempotent(
+	ctx context.Context,
+	consumer string,
+	eventID uuid.UUID,
+	n domain.Notification,
+	requestID string,
+) (domain.Notification, error) {
+	const op = "NotificationService.CreateIdempotent"
+
+	if err := n.Validate(); err != nil {
+		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, ErrInvalidNotification, err)
+	}
+
+	snd, ok := s.senders[n.Channel]
+	if !ok {
+		return domain.Notification{}, fmt.Errorf("%s: %w", op, ErrUnsupportedChannel)
+	}
+
+	id, err := s.repo.SaveIdempotent(ctx, consumer, eventID, n)
+	if err != nil {
+		if errors.Is(err, domain.ErrEventAlreadyProcessed) {
+			return domain.Notification{}, fmt.Errorf("%s: %w", op, domain.ErrEventAlreadyProcessed)
+		}
+
+		s.logger.Error("save failed", "op", op, "error", err)
+		return domain.Notification{}, fmt.Errorf("%s: save: %w", op, err)
+	}
+
+	n.ID = id
+	n.Status = "pending"
+
+	s.wg.Add(1)
+	go s.sendAndUpdateStatus(snd, n, requestID)
+
+	return n, nil
 }
 
 func (s *NotificationService) Get(ctx context.Context, id int) (domain.Notification, error) {

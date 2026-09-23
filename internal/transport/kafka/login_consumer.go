@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -17,6 +18,7 @@ type LoginConsumer struct {
 	reader  *kafka.Reader
 	service *service.NotificationService
 	logger  *slog.Logger
+	groupID string
 }
 
 func NewLoginConsumer(
@@ -35,6 +37,7 @@ func NewLoginConsumer(
 		reader:  reader,
 		service: service,
 		logger:  logger,
+		groupID: groupID,
 	}
 }
 
@@ -65,7 +68,7 @@ func (c *LoginConsumer) Run(ctx context.Context) {
 // handleMessage разбирает одно Kafka-сообщение из топика auth.user.logged_in
 // и создаёт по нему уведомление.
 func (c *LoginConsumer) handleMessage(ctx context.Context, value []byte) error {
-	const op = "Consumer.handleMessage"
+	const op = "LoginConsumer.handleMessage"
 
 	var event authevents.UserLoggedIn
 	if err := json.Unmarshal(value, &event); err != nil {
@@ -80,8 +83,13 @@ func (c *LoginConsumer) handleMessage(ctx context.Context, value []byte) error {
 		IsUrgent:  true,
 	}
 
-	if _, err := c.service.Create(ctx, n, ""); err != nil {
-		return fmt.Errorf("%s: create notification: %w", op, err)
+	_, createErr := c.service.CreateIdempotent(ctx, c.groupID, event.EventID, n, event.EventID.String())
+	if createErr != nil {
+		if errors.Is(createErr, domain.ErrEventAlreadyProcessed) {
+			c.logger.Info("duplicate login event skipped", "op", op, "event_id", event.EventID)
+			return nil
+		}
+		return fmt.Errorf("%s: create notification: %w", op, createErr)
 	}
 
 	return nil
