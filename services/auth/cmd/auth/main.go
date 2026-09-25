@@ -121,6 +121,7 @@ func main() {
 		IdleTimeout:       serverIdleTimeout,
 	}
 
+	// MARK: - Start http server
 	go func() {
 		logger.Info("starting http server", "port", cfg.Port)
 

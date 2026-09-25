@@ -176,17 +176,17 @@ func main() {
 	received := <-sig // freeze here and waiting signal
 	logger.Info("shutdown signal received", "signal", received.String())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	shutDownCtx, shutDownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutDownCancel()
 
 	logger.Info("shutting down http server")
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutDownCtx); err != nil {
 		logger.Error("http server shutdown failed", "error", err)
 	}
 
 	logger.Info("shutting down consumers")
 	consumerCancel()
-	if err := loginConsumer.Close(); err != nil {
+	if err := loginConsumer.Close(shutDownCtx); err != nil {
 		logger.Error("close() login consumer failed", "error", err)
 	}
 

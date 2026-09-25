@@ -40,7 +40,7 @@ services:
     container_name: notifier_redis
     ports:
       - "${REDIS_HOST_PORT:-6379}:${RD_PORT:-6379}"
-    restart: always
+    restart: unless-stopped
     # Redis используется только как cache-aside поверх Postgres (см.
     # internal/repository/cachedRepository.go) — ни один ключ не является
     # источником истины, поэтому персистентность на диск не нужна
@@ -71,6 +71,12 @@ services:
     image: notifier
     container_name: notifier
     restart: unless-stopped
+    # По умолчанию Docker ждёт SIGTERM только 10с и досылает SIGKILL —
+    # меньше, чем 30-секундный бюджет graceful shutdown в main.go
+    # (srv.Shutdown/loginConsumer.Close/GracefulStop/Wait), поэтому
+    # процесс убивался силой (exit 137) до того, как успевал завершиться
+    # сам. Даём запас сверх бюджета кода.
+    stop_grace_period: 35s
     depends_on:
       postgres:
         condition: service_healthy

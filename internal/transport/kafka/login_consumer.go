@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	authevents "contracts/events/auth/v1"
@@ -36,6 +37,12 @@ type LoginConsumer struct {
 	service   *service.NotificationService
 	logger    *slog.Logger
 	groupID   string
+
+	// wg отслеживает фактическое завершение горутины Run — Close ждёт её
+	// перед закрытием reader/dlqWriter, чтобы не закрыть их из-под ещё
+	// работающего цикла (гонка: cancel() контекста лишь сигнал, а не
+	// гарантия, что Run уже вышел).
+	wg sync.WaitGroup
 }
 
 func NewLoginConsumer(
@@ -71,6 +78,9 @@ func NewLoginConsumer(
 
 func (c *LoginConsumer) Run(ctx context.Context) {
 	const op = "Consumer.Run"
+
+	c.wg.Add(1)
+	defer c.wg.Done()
 
 	for {
 		msg, err := c.reader.FetchMessage(ctx)
@@ -127,11 +137,43 @@ func (c *LoginConsumer) handleMessage(ctx context.Context, value []byte) error {
 	return nil
 }
 
-func (c *LoginConsumer) Close() error {
-	if err := c.dlqWriter.Close(); err != nil {
-		return fmt.Errorf("close dlq writer: %w", err)
+func (c *LoginConsumer) Close(ctx context.Context) error {
+	// Close вызывается сразу после отмены контекста, переданного в Run —
+	// сама отмена лишь сигнал, а не гарантия, что горутина Run уже вышла
+	// из цикла. Дожидаемся её реального завершения через wg, иначе можно
+	// закрыть reader/dlqWriter из-под ещё работающей итерации Run.
+	waitDone := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(waitDone)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("wait for consumer loop to stop: %w", ctx.Err())
+	case <-waitDone:
 	}
-	return c.reader.Close()
+
+	closeChan := make(chan error, 1)
+
+	go func() {
+		if err := c.reader.Close(); err != nil {
+			closeChan <- fmt.Errorf("close reader: %w", err)
+			return
+		}
+		if err := c.dlqWriter.Close(); err != nil {
+			closeChan <- fmt.Errorf("close dlq writer: %w", err)
+			return
+		}
+		closeChan <- nil
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-closeChan:
+		return err
+	}
 }
 
 // sendToDLQ переносит недоставленное сообщение в dead-letter топик,
