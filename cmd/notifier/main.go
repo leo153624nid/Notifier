@@ -3,11 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -25,34 +23,13 @@ import (
 	"notifier/internal/service"
 	transport_grpc "notifier/internal/transport/grpc"
 	transport_http "notifier/internal/transport/http"
-	"notifier/internal/transport/kafka"
+	transport_kafka "notifier/internal/transport/kafka"
 )
 
 const (
-	appVersion = "0.2.0"
+	appVersion = "0.3.0"
 	appName    = "Notifier"
-
-	serverReadHeaderTimeout = 5 * time.Second
-	serverReadTimeout       = 10 * time.Second
-	serverWriteTimeout      = 15 * time.Second
-	serverIdleTimeout       = 60 * time.Second
 )
-
-// parseLevel преобразует строковый уровень логирования из конфигурации в slog.Level.
-func parseLevel(s string) slog.Level {
-	levels := map[string]slog.Level{
-		"debug": slog.LevelDebug,
-		"info":  slog.LevelInfo,
-		"warn":  slog.LevelWarn,
-		"error": slog.LevelError,
-	}
-
-	if lvl, ok := levels[strings.ToLower(s)]; ok {
-		return lvl
-	}
-
-	return slog.LevelInfo
-}
 
 func main() {
 	ctx, cancel := signal.NotifyContext(
@@ -70,16 +47,17 @@ func main() {
 		os.Exit(1)
 	}
 	defer logger.Close()
+	logger = logger.With(
+		zap.String("app", appName),
+		zap.String("version", appVersion),
+	)
 	logger.Warn("starting notifier app")
 
-	opts := &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, opts)).With("service", appName, "version", appVersion)
 	cfg, cfgErr := core_config.Load()
 	if cfgErr != nil {
-		logger.Error("config load", zap.Error(cfgErr))
+		logger.Error("config load failed", zap.Error(cfgErr))
 		os.Exit(1)
 	}
-
 
 	// MARK: - Start DB connection
 	logger.Warn("starting database connection")
@@ -87,7 +65,8 @@ func main() {
 	ctxDbInit, cancelDbInit := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelDbInit()
 
-	db, dbErr := pgxpool.New(ctxDbInit, cfg.DSN)
+	postgresCfg := postgres.LoadConfig()
+	db, dbErr := pgxpool.New(ctxDbInit, postgresCfg.DSN())
 	if dbErr != nil {
 		logger.Error("pgxpool.new", zap.Error(dbErr))
 		os.Exit(1)
@@ -110,9 +89,10 @@ func main() {
 	ctxRedisInit, cancelRedisInit := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelRedisInit()
 
+	redisCfg := cache.LoadConfig()
 	cacheRepo := cache.NewRedisClient(
-		cfg.RedisCfg.Addr,
-		cfg.RedisCfg.Password,
+		redisCfg.Addr,
+		redisCfg.Password,
 		100*time.Millisecond, // dial
 		100*time.Millisecond, // read
 		100*time.Millisecond, // write
@@ -150,6 +130,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "service: %s\n", err)
 		os.Exit(1)
 	}
+
 	healthService := service.NewHealthService(
 		db,
 		cache.NewPinger(cacheRepo),
@@ -162,33 +143,24 @@ func main() {
 		appName,
 		appVersion,
 	)
-	router := transport_http.NewRouter(
-		notificationsTransportHTTP,
-		cfg.JWTSecret,
-		logger,
-	)
-
-	srv := &http.Server{
-		Addr:              cfg.Port,
-		Handler:           router,
-		ReadHeaderTimeout: serverReadHeaderTimeout,
-		ReadTimeout:       serverReadTimeout,
-		WriteTimeout:      serverWriteTimeout,
-		IdleTimeout:       serverIdleTimeout,
-	}
 
 	grpcServer := transport_grpc.NewGRPCServer(notificationService, logger)
-	grpcLis, err := net.Listen("tcp", cfg.GRPCPort)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "grpc listen: %s\n", err)
+	grpcCfg := transport_grpc.LoadConfig()
+	grpcLis, grpcErr := net.Listen("tcp", grpcCfg.GRPCPort)
+	if grpcErr != nil {
+		logger.Error(
+			"grpc listen failed",
+			zap.Error(grpcErr),
+		)
 		os.Exit(1)
 	}
 
-	loginConsumer := kafka.NewLoginConsumer(
-		cfg.KafkaCfg.Brokers,
-		cfg.KafkaCfg.LoginTopic,
-		cfg.KafkaCfg.LoginGroupID,
-		cfg.KafkaCfg.DLQTopic,
+	kafkaCfg := transport_kafka.LoadConfig()
+	loginConsumer := transport_kafka.NewLoginConsumer(
+		kafkaCfg.Brokers,
+		kafkaCfg.LoginTopic,
+		kafkaCfg.LoginGroupID,
+		kafkaCfg.DLQTopic,
 		notificationService,
 		logger,
 	)
@@ -207,7 +179,7 @@ func main() {
 	go func() {
 		logger.Warn(
 			"starting gRPC server",
-			zap.String("port", cfg.GRPCPort),
+			zap.String("port", grpcCfg.GRPCPort),
 		)
 
 		if err := grpcServer.Serve(grpcLis); err != nil {
@@ -220,9 +192,11 @@ func main() {
 
 	// MARK: - Start consumers
 	logger.Warn("starting consumers")
+
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
 	go loginConsumer.Run(consumerCtx)
 
+	// MARK: - Start HTTP server
 	if err := httpServer.Run(ctx); err != nil { // freeze here
 		logger.Error(
 			"HTTP server run error",

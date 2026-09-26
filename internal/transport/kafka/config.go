@@ -1,4 +1,4 @@
-package core_config
+package transport_kafka
 
 import (
 	"os"
@@ -7,14 +7,14 @@ import (
 	authevents "contracts/events/auth/v1"
 )
 
-type KafkaConfig struct {
+type Config struct {
 	LoginTopic   string
 	DLQTopic     string
 	LoginGroupID string
 	Brokers      []string
 }
 
-func LoadKafkaConfig() KafkaConfig {
+func LoadConfig() Config {
 	brokers := []string{"kafka:9092"}
 	loginTopic := authevents.TopicUserLoggedIn
 	dlqTopic := authevents.TopicNotifierDLQ
@@ -33,7 +33,7 @@ func LoadKafkaConfig() KafkaConfig {
 		groupID = v
 	}
 
-	return KafkaConfig{
+	return Config{
 		Brokers:      brokers,
 		LoginTopic:   loginTopic,
 		DLQTopic:     dlqTopic,

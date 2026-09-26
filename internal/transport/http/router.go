@@ -9,12 +9,12 @@ import (
 
 // Router — собранный http.Handler со всеми маршрутами и middleware,
 // плюс доступ к фоновым ресурсам (rate limiter), которые нужно останавливать при shutdown.
-type Router struct {
+type OldRouter struct {
 	http.Handler
 	limiter *ipRateLimiter
 }
 
-func NewRouter(h *NotificationsHTTPHandler, jwtSecret string, logger *slog.Logger) *Router {
+func NewOldRouter(h *NotificationsHTTPHandler, jwtSecret string, logger *slog.Logger) *OldRouter {
 	auth := authMiddleware(jwtSecret, logger)
 
 	ipLimiter := newIPRateLimiter(rate.Limit(10), 20)
@@ -30,13 +30,13 @@ func NewRouter(h *NotificationsHTTPHandler, jwtSecret string, logger *slog.Logge
 
 	handler := requestID(loggingRecoverMiddleware(logger)(contentType(mux)))
 
-	return &Router{
+	return &OldRouter{
 		Handler: handler,
 		limiter: ipLimiter,
 	}
 }
 
 // Stop останавливает фоновую очистку rate limiter'а — вызывать при graceful shutdown.
-func (rt *Router) Stop() {
+func (rt *OldRouter) Stop() {
 	rt.limiter.Stop()
 }

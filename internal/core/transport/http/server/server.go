@@ -5,9 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	core_logger "notifier/internal/core/logger"
+	"time"
 
 	"go.uber.org/zap"
+
+	core_logger "notifier/internal/core/logger"
+)
+
+const (
+	serverReadHeaderTimeout = 5 * time.Second
+	serverReadTimeout       = 10 * time.Second
+	serverWriteTimeout      = 15 * time.Second
+	serverIdleTimeout       = 60 * time.Second
 )
 
 type HTTPServer struct {
@@ -40,8 +49,12 @@ func (srv *HTTPServer) RegisterApiRoutes(routers ...*ApiVersionRouter) {
 
 func (srv *HTTPServer) Run(ctx context.Context) error {
 	server := http.Server{
-		Addr:    ":" + srv.config.Port,
-		Handler: srv.mux,
+		Addr:              ":" + srv.config.Port,
+		Handler:           srv.mux,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       serverIdleTimeout,
 	}
 
 	ch := make(chan error, 1)

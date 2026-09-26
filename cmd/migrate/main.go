@@ -22,8 +22,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 
-	core_config "notifier/internal/core/config"
 	"notifier/internal/migrations"
+	"notifier/internal/repository/postgres"
 )
 
 func main() {
@@ -46,7 +46,7 @@ func run(cmd string) error {
 		return fmt.Errorf("source: %w", err)
 	}
 
-	dsn := core_config.LoadPostgresConfig().MigrateDSN()
+	dsn := postgres.LoadConfig().MigrateDSN()
 
 	m, err := migrate.NewWithSourceInstance("iofs", src, dsn)
 	if err != nil {
