@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 )
 
 func TestConsoleSender(t *testing.T) {

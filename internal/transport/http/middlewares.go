@@ -1,4 +1,4 @@
-package http
+package transport_http
 
 import (
 	"context"

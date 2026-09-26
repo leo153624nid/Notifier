@@ -1,4 +1,4 @@
-package http
+package transport_http
 
 import (
 	"log/slog"
@@ -14,7 +14,7 @@ type Router struct {
 	limiter *ipRateLimiter
 }
 
-func NewRouter(h *Handler, jwtSecret string, logger *slog.Logger) *Router {
+func NewRouter(h *NotificationsHTTPHandler, jwtSecret string, logger *slog.Logger) *Router {
 	auth := authMiddleware(jwtSecret, logger)
 
 	ipLimiter := newIPRateLimiter(rate.Limit(10), 20)

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	authevents "contracts/events/auth/v1"
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 	"notifier/internal/service"
 
 	"github.com/segmentio/kafka-go"

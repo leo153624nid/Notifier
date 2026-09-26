@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"notifier/internal/audit"
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 )
@@ -89,19 +89,19 @@ func TestNotificationService_Create(t *testing.T) {
 		{
 			name:      "empty recipient",
 			n:         domain.Notification{Recipient: "", Subject: "some", Channel: "email"},
-			wantErr:   ErrInvalidNotification,
+			wantErr:   domain.ErrInvalidNotification,
 			wantCalls: 0,
 		},
 		{
 			name:      "empty channel",
 			n:         domain.Notification{Recipient: "user@example.com", Subject: "some", Channel: ""},
-			wantErr:   ErrInvalidNotification,
+			wantErr:   domain.ErrInvalidNotification,
 			wantCalls: 0,
 		},
 		{
 			name:      "unknown channel",
 			n:         domain.Notification{Recipient: "user@example.com", Subject: "some", Channel: "sms"},
-			wantErr:   ErrUnsupportedChannel,
+			wantErr:   domain.ErrUnsupportedChannel,
 			wantCalls: 0,
 		},
 	}

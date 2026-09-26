@@ -1,4 +1,4 @@
-package repository
+package cached_repo
 
 import (
 	"context"
@@ -10,18 +10,19 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
+	"notifier/internal/repository"
 )
 
 type CachedNotificationRepo struct {
-	repo   NotificationRepo
+	repo   repository.NotificationRepo
 	redis  *redis.Client
 	logger *slog.Logger
 	ttl    time.Duration
 }
 
 func NewCachedNotificationRepo(
-	repo NotificationRepo,
+	repo repository.NotificationRepo,
 	redis *redis.Client,
 	logger *slog.Logger,
 	ttl time.Duration,

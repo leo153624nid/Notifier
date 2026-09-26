@@ -8,7 +8,7 @@ import (
 	"sync"
 	"uuid"
 
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 )
 
 type MemoryRepository struct {

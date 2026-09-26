@@ -1,4 +1,4 @@
-package http
+package transport_http
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"notifier/internal/audit"
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 	"notifier/internal/service"
@@ -40,7 +40,7 @@ func newTestHandler(
 	senders map[string]sender.Sender,
 	pingerDB service.Pinger,
 	pingerCache service.Pinger,
-) (*Handler, *repository.MemoryRepository) {
+) (*NotificationsHTTPHandler, *repository.MemoryRepository) {
 	t.Helper()
 
 	repo := repository.NewMemoryRepository()
@@ -53,7 +53,7 @@ func newTestHandler(
 	}
 	healthService := service.NewHealthService(pingerDB, pingerCache)
 
-	return NewHandler(notificationService, healthService, logger, "Notifier", "test"), repo
+	return NewNotificationsHTTPHandler(notificationService, healthService, logger, "Notifier", "test"), repo
 }
 
 func TestHealthHandler(t *testing.T) {

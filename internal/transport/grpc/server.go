@@ -1,4 +1,4 @@
-package grpc
+package transport_grpc
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	notificationv1 "contracts/gen/notifications/v1"
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 	"notifier/internal/service"
 
 	"google.golang.org/grpc"
@@ -58,9 +58,9 @@ func (r *Router) CreateNotification(
 	created, err := r.notifications.Create(ctx, n, requestID)
 	if err != nil {
 		switch {
-		case errors.Is(err, service.ErrInvalidNotification):
+		case errors.Is(err, domain.ErrInvalidNotification):
 			return nil, status.Error(codes.InvalidArgument, "invalid request")
-		case errors.Is(err, service.ErrUnsupportedChannel):
+		case errors.Is(err, domain.ErrUnsupportedChannel):
 			return nil, status.Error(codes.InvalidArgument, "unsupported channel")
 		default:
 			r.logger.Error("create notification failed", "op", op, "error", err)

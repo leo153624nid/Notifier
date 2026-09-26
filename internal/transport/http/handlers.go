@@ -1,44 +1,17 @@
-package http
+package transport_http
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
-	"notifier/internal/domain"
-	"notifier/internal/service"
+	"notifier/internal/core/domain"
 )
 
-// Handler отвечает за перевод HTTP-запросов в вызовы сервисного слоя и обратно.
-type Handler struct {
-	notifications *service.NotificationService
-	health        *service.HealthService
-	logger        *slog.Logger
-	appName       string
-	appVersion    string
-}
-
-func NewHandler(
-	notifications *service.NotificationService,
-	health *service.HealthService,
-	logger *slog.Logger,
-	appName string,
-	appVersion string,
-) *Handler {
-	return &Handler{
-		notifications: notifications,
-		health:        health,
-		logger:        logger,
-		appName:       appName,
-		appVersion:    appVersion,
-	}
-}
-
-func (h *Handler) healthHandler(w http.ResponseWriter, r *http.Request) {
+func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.Request) {
 	const op = "Handler.health"
 
 	ctxDB, cancelDB := context.WithTimeout(r.Context(), 1*time.Second)
@@ -78,7 +51,7 @@ func (h *Handler) healthHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(js)
 }
 
-func (h *Handler) getNotification(w http.ResponseWriter, r *http.Request) {
+func (h *NotificationsHTTPHandler) getNotification(w http.ResponseWriter, r *http.Request) {
 	const op = "Handler.getNotification"
 
 	idStr := r.PathValue("id")
@@ -111,7 +84,7 @@ func (h *Handler) getNotification(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(js)
 }
 
-func (h *Handler) deleteNotification(w http.ResponseWriter, r *http.Request) {
+func (h *NotificationsHTTPHandler) deleteNotification(w http.ResponseWriter, r *http.Request) {
 	const op = "Handler.deleteNotification"
 
 	idStr := r.PathValue("id")
@@ -136,7 +109,7 @@ func (h *Handler) deleteNotification(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) listNotifications(w http.ResponseWriter, r *http.Request) {
+func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *http.Request) {
 	const op = "Handler.listNotifications"
 
 	query := r.URL.Query()
@@ -161,43 +134,7 @@ func (h *Handler) listNotifications(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(js)
 }
 
-func (h *Handler) createNotification(w http.ResponseWriter, r *http.Request) {
-	const op = "Handler.createNotification"
-
-	var req CreateNotificationRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		SendJSONError(w, "invalid request payload", http.StatusBadRequest)
-		return
-	}
-
-	requestID := getRequestID(r.Context())
-
-	n, err := h.notifications.Create(r.Context(), req.toDomain(), requestID)
-	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrInvalidNotification):
-			SendJSONError(w, "invalid request", http.StatusBadRequest)
-		case errors.Is(err, service.ErrUnsupportedChannel):
-			SendJSONError(w, "invalid request: unsupported channel", http.StatusBadRequest)
-		default:
-			h.logger.Error("create notification failed", "op", op, "error", err)
-			SendJSONError(w, "internal error", http.StatusInternalServerError)
-		}
-		return
-	}
-
-	js, err := json.Marshal(toNotificationResponse(n))
-	if err != nil {
-		h.logger.Error("marshal failed", "op", op, "error", err)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusAccepted)
-	_, _ = w.Write(js)
-}
-
-func (h *Handler) exportNotification(w http.ResponseWriter, r *http.Request) {
+func (h *NotificationsHTTPHandler) exportNotification(w http.ResponseWriter, r *http.Request) {
 	const op = "Handler.exportNotification"
 
 	count, err := h.notifications.Export(r.Context())

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 )
 
 func TestMemoryRepository_ConcurrentSave(t *testing.T) {

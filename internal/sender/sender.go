@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 )
 
 type Sender interface {

@@ -1,4 +1,4 @@
-package repository
+package postgres
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 )
 
 type PostgresRepository struct {

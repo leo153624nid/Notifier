@@ -10,7 +10,7 @@ package main
 import (
 	"fmt"
 
-	"notifier/internal/config"
+	"notifier/internal/core/config"
 )
 
 // defaultPartitions/defaultReplicationFactor — значения для локального

@@ -10,7 +10,7 @@ import (
 	"uuid"
 
 	"notifier/internal/audit"
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 )
@@ -66,12 +66,12 @@ func (s *NotificationService) Create(
 	const op = "NotificationService.Create"
 
 	if err := n.Validate(); err != nil {
-		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, ErrInvalidNotification, err)
+		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, domain.ErrInvalidNotification, err)
 	}
 
 	snd, ok := s.senders[n.Channel]
 	if !ok {
-		return domain.Notification{}, fmt.Errorf("%s: %w", op, ErrUnsupportedChannel)
+		return domain.Notification{}, fmt.Errorf("%s: %w", op, domain.ErrUnsupportedChannel)
 	}
 
 	id, err := s.repo.Save(ctx, n)
@@ -126,12 +126,12 @@ func (s *NotificationService) CreateIdempotent(
 	const op = "NotificationService.CreateIdempotent"
 
 	if err := n.Validate(); err != nil {
-		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, ErrInvalidNotification, err)
+		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, domain.ErrInvalidNotification, err)
 	}
 
 	snd, ok := s.senders[n.Channel]
 	if !ok {
-		return domain.Notification{}, fmt.Errorf("%s: %w", op, ErrUnsupportedChannel)
+		return domain.Notification{}, fmt.Errorf("%s: %w", op, domain.ErrUnsupportedChannel)
 	}
 
 	id, err := s.repo.SaveIdempotent(ctx, consumer, eventID, n)

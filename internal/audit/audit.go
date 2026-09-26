@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 )
 
 type Logger struct {

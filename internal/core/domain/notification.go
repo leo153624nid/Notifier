@@ -5,7 +5,7 @@ import (
 	"unicode/utf8"
 )
 
-type Notification struct {
+type Notification struct { // TODO: add version ?
 	Recipient string `json:"to"`
 	Subject   string `json:"subject"`
 	Body      string `json:"body"`

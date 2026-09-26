@@ -17,12 +17,13 @@ import (
 
 	"notifier/internal/audit"
 	"notifier/internal/cache"
-	"notifier/internal/config"
-	"notifier/internal/repository"
+	"notifier/internal/core/config"
+	cached_repo "notifier/internal/repository/cache"
+	"notifier/internal/repository/postgres"
 	"notifier/internal/sender"
 	"notifier/internal/service"
-	transportgrpc "notifier/internal/transport/grpc"
-	transporthttp "notifier/internal/transport/http"
+	transport_grpc "notifier/internal/transport/grpc"
+	transport_http "notifier/internal/transport/http"
 	"notifier/internal/transport/kafka"
 )
 
@@ -83,7 +84,7 @@ func main() {
 	// приложением — так безопаснее при нескольких репликах и позволяет
 	// откатывать миграции независимо от релизов сервиса.
 
-	postgresRepo := repository.NewPostgresRepository(db, logger)
+	postgresRepo := postgres.NewPostgresRepository(db, logger)
 
 	ctxRedisInit, cancelRedisInit := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelRedisInit()
@@ -101,7 +102,7 @@ func main() {
 		logger.Error("redis ping failed", "error", errRedis)
 	}
 
-	repo := repository.NewCachedNotificationRepo(postgresRepo, cacheRepo, logger, 30*time.Second)
+	repo := cached_repo.NewCachedNotificationRepo(postgresRepo, cacheRepo, logger, 30*time.Second)
 
 	senders := map[string]sender.Sender{
 		"console":  sender.LoggingSender{Sender: sender.NewConsoleSender(os.Stdout), Logger: logger},
@@ -118,8 +119,8 @@ func main() {
 	}
 	healthService := service.NewHealthService(db, cache.NewPinger(cacheRepo))
 
-	handler := transporthttp.NewHandler(notificationService, healthService, logger, appName, appVersion)
-	router := transporthttp.NewRouter(handler, cfg.JWTSecret, logger)
+	handler := transport_http.NewNotificationsHTTPHandler(notificationService, healthService, logger, appName, appVersion)
+	router := transport_http.NewRouter(handler, cfg.JWTSecret, logger)
 
 	srv := &http.Server{
 		Addr:              cfg.Port,
@@ -130,7 +131,7 @@ func main() {
 		IdleTimeout:       serverIdleTimeout,
 	}
 
-	grpcServer := transportgrpc.NewGRPCServer(notificationService, logger)
+	grpcServer := transport_grpc.NewGRPCServer(notificationService, logger)
 	grpcLis, err := net.Listen("tcp", cfg.GRPCPort)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "grpc listen: %s\n", err)

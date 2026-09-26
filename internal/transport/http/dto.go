@@ -1,45 +1,23 @@
-package http
+package transport_http
 
 import (
 	"encoding/json"
 	"net/http"
 
-	"notifier/internal/domain"
+	"notifier/internal/core/domain"
 )
 
 type APIError struct {
 	Error string `json:"error"`
 }
 
-// CreateNotificationRequest — тело запроса POST /api/v1/notifications.
-type CreateNotificationRequest struct {
-	To      string `json:"to"`
-	Subject string `json:"subject"`
-	Body    string `json:"body"`
-	Channel string `json:"channel"`
-	Urgent  bool   `json:"urgent"`
-}
-
-func (r CreateNotificationRequest) toDomain() domain.Notification {
-	return domain.Notification{
-		Recipient: r.To,
-		Subject:   r.Subject,
-		Body:      r.Body,
-		Channel:   r.Channel,
-		IsUrgent:  r.Urgent,
-	}
-}
-
-// NotificationResponse — представление уведомления в HTTP API.
-//
-//nolint:govet
 type NotificationResponse struct {
-	ID        int    `json:"id"`
 	Recipient string `json:"to"`
 	Subject   string `json:"subject"`
 	Body      string `json:"body"`
 	Channel   string `json:"channel"`
 	Status    string `json:"status"`
+	ID        int    `json:"id"`
 	IsUrgent  bool   `json:"urgent"`
 }
 
