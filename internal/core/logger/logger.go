@@ -40,8 +40,8 @@ func NewLogger(cfg LoggerConfig) (*Logger, error) {
 		return nil, fmt.Errorf("%s: UnmarshalText: %w", op, err)
 	}
 
-	if err := os.Mkdir(cfg.Folder, 0755); err != nil {
-		return nil, fmt.Errorf("%s: Mkdir: %w", op, err)
+	if err := os.MkdirAll(cfg.Folder, 0755); err != nil {
+		return nil, fmt.Errorf("%s: MkdirAll: %w", op, err)
 	}
 
 	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05.000000")

@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"notifier/internal/core/domain"
+
+	"go.uber.org/zap"
 )
 
 type CreateNotificationRequest struct {
@@ -59,7 +61,11 @@ func (h *NotificationsHTTPHandler) createNotification(w http.ResponseWriter, r *
 		case errors.Is(err, domain.ErrUnsupportedChannel):
 			SendJSONError(w, "invalid request: unsupported channel", http.StatusBadRequest)
 		default:
-			h.logger.Error("create notification failed", "op", op, "error", err)
+			h.logger.Error(
+				"create notification failed",
+				zap.String("op", op),
+				zap.Error(err),
+			)
 			SendJSONError(w, "internal error", http.StatusInternalServerError)
 		}
 		return
@@ -67,7 +73,11 @@ func (h *NotificationsHTTPHandler) createNotification(w http.ResponseWriter, r *
 
 	js, err := json.Marshal(toCreateNotificationResponse(n))
 	if err != nil {
-		h.logger.Error("marshal failed", "op", op, "error", err)
+		h.logger.Error(
+			"marshal failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}

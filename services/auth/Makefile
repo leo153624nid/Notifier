@@ -18,7 +18,7 @@ ENV_FILE ?= .env
 # запасные значения на случай, если $(ENV_FILE) отсутствует или не
 # задаёт переменную (например, на чистом чекауте без cp .env.example .env)
 PORT ?= 8081
-LOG_LEVEL ?= info
+LOG_LEVEL ?= INFO
 JWT_SECRET ?= devsecret
 JWT_ACCESS_TTL ?= 15m
 JWT_REFRESH_TTL ?= 720h

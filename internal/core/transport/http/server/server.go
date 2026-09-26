@@ -27,7 +27,7 @@ func NewHTTPServer(
 	}
 }
 
-func (srv *HTTPServer) RegisterApiRoutes(routers ...ApiVersionRouter) {
+func (srv *HTTPServer) RegisterApiRoutes(routers ...*ApiVersionRouter) {
 	for _, router := range routers {
 		prefix := "/api/" + string(router.apiVersion)
 
@@ -40,7 +40,7 @@ func (srv *HTTPServer) RegisterApiRoutes(routers ...ApiVersionRouter) {
 
 func (srv *HTTPServer) Run(ctx context.Context) error {
 	server := http.Server{
-		Addr:    srv.config.Addr,
+		Addr:    ":" + srv.config.Port,
 		Handler: srv.mux,
 	}
 
@@ -49,9 +49,9 @@ func (srv *HTTPServer) Run(ctx context.Context) error {
 	go func() {
 		defer close(ch)
 
-		srv.logger.Info(
+		srv.logger.Warn(
 			"start HTTP server",
-			zap.String("addr", srv.config.Addr),
+			zap.String("port", srv.config.Port),
 		)
 
 		err := server.ListenAndServe()
@@ -66,7 +66,7 @@ func (srv *HTTPServer) Run(ctx context.Context) error {
 			return fmt.Errorf("listen and serve HTTP: %w", err)
 		}
 	case <-ctx.Done():
-		srv.logger.Info("shutdown HTTP server...")
+		srv.logger.Warn("shutdown HTTP server...")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), srv.config.ShutdownTimeout)
 		defer cancel()
@@ -82,7 +82,7 @@ func (srv *HTTPServer) Run(ctx context.Context) error {
 			return fmt.Errorf("shutdown HTTP server: %w", err)
 		}
 
-		srv.logger.Info("HTTP server stopped")
+		srv.logger.Warn("HTTP server stopped")
 	}
 
 	return nil

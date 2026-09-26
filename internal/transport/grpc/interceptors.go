@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"log/slog"
+	core_logger "notifier/internal/core/logger"
 	"runtime/debug"
 	"time"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -43,7 +44,7 @@ func requestIDInterceptor(
 }
 
 // MARK: - Logging and Recovery
-func loggingRecoveryInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
+func loggingRecoveryInterceptor(logger *core_logger.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req any,
@@ -55,7 +56,12 @@ func loggingRecoveryInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor
 
 		defer func() {
 			if p := recover(); p != nil {
-				logger.Error("panic recovered", "request_id", reqID, "panic", p, "stack", debug.Stack())
+				logger.Error(
+					"panic recovered",
+					zap.String("request_id", reqID),
+					zap.Any("panic", p),
+					zap.String("stack", string(debug.Stack())),
+				)
 				err = status.Error(codes.Internal, "internal error")
 			}
 		}()
@@ -64,10 +70,10 @@ func loggingRecoveryInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor
 
 		logger.Info(
 			"request completed",
-			"method", info.FullMethod,
-			"duration", time.Since(start),
-			"request_id", reqID,
-			"error", err,
+			zap.String("method", info.FullMethod),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("request_id", reqID),
+			zap.Error(err),
 		)
 
 		return resp, err

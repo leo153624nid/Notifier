@@ -3,12 +3,13 @@ package transport_grpc
 import (
 	"context"
 	"errors"
-	"log/slog"
 
 	notificationv1 "contracts/gen/notifications/v1"
 	"notifier/internal/core/domain"
+	core_logger "notifier/internal/core/logger"
 	"notifier/internal/service"
 
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -17,24 +18,33 @@ import (
 type Router struct {
 	notificationv1.UnimplementedNotificationServiceServer
 	notifications *service.NotificationService
-	logger        *slog.Logger
+	logger        *core_logger.Logger
 }
 
-func NewRouter(notifications *service.NotificationService, logger *slog.Logger) *Router {
+func NewRouter(
+	notifications *service.NotificationService,
+	logger *core_logger.Logger,
+) *Router {
 	return &Router{
 		notifications: notifications,
 		logger:        logger,
 	}
 }
 
-func NewGRPCServer(notifications *service.NotificationService, logger *slog.Logger) *grpc.Server {
+func NewGRPCServer(
+	notifications *service.NotificationService,
+	logger *core_logger.Logger,
+) *grpc.Server {
 	srv := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			requestIDInterceptor,
 			loggingRecoveryInterceptor(logger),
 		),
 	)
-	notificationv1.RegisterNotificationServiceServer(srv, NewRouter(notifications, logger))
+	notificationv1.RegisterNotificationServiceServer(
+		srv,
+		NewRouter(notifications, logger),
+	)
 
 	return srv
 }
@@ -63,7 +73,11 @@ func (r *Router) CreateNotification(
 		case errors.Is(err, domain.ErrUnsupportedChannel):
 			return nil, status.Error(codes.InvalidArgument, "unsupported channel")
 		default:
-			r.logger.Error("create notification failed", "op", op, "error", err)
+			r.logger.Error(
+				"create notification failed",
+				zap.String("op", op),
+				zap.Error(err),
+			)
 			return nil, status.Error(codes.Internal, "internal error")
 		}
 	}

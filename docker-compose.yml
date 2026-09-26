@@ -93,6 +93,9 @@ services:
       GRPC_PORT: ${NOTIFIER_GRPC_PORT:-9090}
       JWT_SECRET: ${JWT_SECRET:-devsecret}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Путь внутри контейнера — см. volumes ниже, где он смонтирован на
+      # ./out/logs на хосте.
+      LOG_FOLDER: /var/log/notifier
       # Postgres
       # Внутри docker-сети адрес БД всегда postgres:5432 — это топология
       # compose (имя сервиса + его порт внутри сети), а не настраиваемый
@@ -116,6 +119,8 @@ services:
     ports:
       - "${APP_HOST_PORT:-8080}:${PORT:-8080}"
       - "${NOTIFIER_GRPC_HOST_PORT:-9090}:${NOTIFIER_GRPC_PORT:-9090}"
+    volumes:
+      - ./out/logs:/var/log/notifier
 
   postgres_auth:
     image: postgres:16-alpine

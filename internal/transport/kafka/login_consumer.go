@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
 	authevents "contracts/events/auth/v1"
 	"notifier/internal/core/domain"
+	core_logger "notifier/internal/core/logger"
 	"notifier/internal/service"
 
 	"github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
 )
 
 // messageWriter — часть API *kafka.Writer, нужная для отправки в DLQ;
@@ -35,7 +36,7 @@ type LoginConsumer struct {
 	reader    messageReader
 	dlqWriter messageWriter
 	service   *service.NotificationService
-	logger    *slog.Logger
+	logger    *core_logger.Logger
 	groupID   string
 
 	// wg отслеживает фактическое завершение горутины Run — Close ждёт её
@@ -51,7 +52,7 @@ func NewLoginConsumer(
 	groupID string,
 	dlqTopic string,
 	service *service.NotificationService,
-	logger *slog.Logger,
+	logger *core_logger.Logger,
 ) *LoginConsumer {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: brokers,
@@ -89,20 +90,36 @@ func (c *LoginConsumer) Run(ctx context.Context) {
 				return
 			}
 
-			c.logger.Error("kafka read failed", "op", op, "error", err)
+			c.logger.Error(
+				"kafka read failed",
+				zap.String("op", op),
+				zap.Error(err),
+			)
 			continue
 		}
 
 		if err := c.handleMessage(ctx, msg.Value); err != nil {
-			c.logger.Error("handle message failed", "op", op, "error", err)
+			c.logger.Error(
+				"handle message failed",
+				zap.String("op", op),
+				zap.Error(err),
+			)
 
 			if dlqErr := c.sendToDLQ(ctx, msg, err); dlqErr != nil {
-				c.logger.Error("failed to send msg to dlq", "op", op, "error", dlqErr)
+				c.logger.Error(
+					"failed to send msg to dlq",
+					zap.String("op", op),
+					zap.Error(dlqErr),
+				)
 				continue
 			}
 		}
 		if err := c.reader.CommitMessages(ctx, msg); err != nil {
-			c.logger.Error("failed to commit msg", "op", op, "error", err)
+			c.logger.Error(
+				"failed to commit msg",
+				zap.String("op", op),
+				zap.Error(err),
+			)
 		}
 	}
 }
@@ -128,7 +145,11 @@ func (c *LoginConsumer) handleMessage(ctx context.Context, value []byte) error {
 	_, createErr := c.service.CreateIdempotent(ctx, c.groupID, event.EventID, n, event.EventID.String())
 	if createErr != nil {
 		if errors.Is(createErr, domain.ErrEventAlreadyProcessed) {
-			c.logger.Info("duplicate login event skipped", "op", op, "event_id", event.EventID)
+			c.logger.Info(
+				"duplicate login event skipped",
+				zap.String("op", op),
+				zap.String("event_id", event.EventID.String()),
+			)
 			return nil
 		}
 		return fmt.Errorf("%s: create notification: %w", op, createErr)

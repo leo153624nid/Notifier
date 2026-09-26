@@ -4,21 +4,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 
 	"notifier/internal/core/domain"
+	core_logger "notifier/internal/core/logger"
 )
 
 type PostgresRepository struct {
 	db     *pgxpool.Pool
-	logger *slog.Logger
+	logger *core_logger.Logger
 }
 
-func NewPostgresRepository(db *pgxpool.Pool, logger *slog.Logger) *PostgresRepository {
+func NewPostgresRepository(
+	db *pgxpool.Pool,
+	logger *core_logger.Logger,
+) *PostgresRepository {
 	return &PostgresRepository{
 		db:     db,
 		logger: logger,
@@ -58,7 +62,11 @@ func (r *PostgresRepository) SaveIdempotent(
 	}
 	defer func() {
 		if rollErr := tx.Rollback(ctx); rollErr != nil {
-			r.logger.Error("rollback failed", "op", op, "error", rollErr)
+			r.logger.Error(
+				"rollback failed",
+				zap.String("op", op),
+				zap.Error(rollErr),
+			)
 		}
 	}()
 

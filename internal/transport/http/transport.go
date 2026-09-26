@@ -2,11 +2,11 @@ package transport_http
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"uuid"
 
 	"notifier/internal/core/domain"
+	core_logger "notifier/internal/core/logger"
 	core_http_server "notifier/internal/core/transport/http/server"
 )
 
@@ -14,9 +14,9 @@ import (
 type NotificationsHTTPHandler struct {
 	notifications NotificationService
 	health        HealthService
-	logger        *slog.Logger // TODO: delete ?
-	appName       string       // TODO: delete ?
-	appVersion    string       // TODO: delete ?
+	logger        *core_logger.Logger // TODO: delete ?
+	appName       string
+	appVersion    string
 }
 
 type NotificationService interface {
@@ -66,7 +66,7 @@ type HealthService interface {
 func NewNotificationsHTTPHandler(
 	notifications NotificationService,
 	health HealthService,
-	logger *slog.Logger,
+	logger *core_logger.Logger,
 	appName string,
 	appVersion string,
 ) *NotificationsHTTPHandler {

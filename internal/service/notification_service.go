@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 	"uuid"
@@ -66,7 +65,7 @@ func (s *NotificationService) Create(
 	const op = "NotificationService.Create"
 
 	if err := n.Validate(); err != nil {
-		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, domain.ErrInvalidNotification, err)
+		return domain.Notification{}, fmt.Errorf("%s: %w: %v", op, domain.ErrInvalidNotification, err)
 	}
 
 	snd, ok := s.senders[n.Channel]

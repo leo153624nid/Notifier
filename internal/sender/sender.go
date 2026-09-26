@@ -4,16 +4,21 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"sync"
 	"time"
 
 	"notifier/internal/core/domain"
+	core_logger "notifier/internal/core/logger"
+
+	"go.uber.org/zap"
 )
 
 type Sender interface {
-	Send(ctx context.Context, n domain.Notification) error
+	Send(
+		ctx context.Context,
+		n domain.Notification,
+	) error
 }
 
 // MockSender — тестовый Sender. Безопасен для конкурентных вызовов Send,
@@ -23,7 +28,10 @@ type MockSender struct {
 	mu    sync.Mutex
 }
 
-func (m *MockSender) Send(ctx context.Context, n domain.Notification) error {
+func (m *MockSender) Send(
+	ctx context.Context,
+	n domain.Notification,
+) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -33,7 +41,7 @@ func (m *MockSender) Send(ctx context.Context, n domain.Notification) error {
 
 type LoggingSender struct {
 	Sender
-	Logger *slog.Logger
+	Logger *core_logger.Logger
 }
 
 type ConsoleSender struct {
@@ -44,16 +52,29 @@ type EmailSender struct {
 }
 type TelegramSender struct{}
 
-func (ls LoggingSender) Send(ctx context.Context, n domain.Notification) error {
-	ls.Logger.Info("sending", "to", n.Recipient, "channel", n.Channel)
+func (ls LoggingSender) Send(
+	ctx context.Context,
+	n domain.Notification,
+) error {
+	ls.Logger.Info(
+		"sending",
+		zap.String("to", n.Recipient),
+		zap.String("channel", n.Channel),
+	)
 
-	err := ls.Sender.Send(ctx, n)
-	if err != nil {
-		ls.Logger.Error("Failed to send notification", "error", err)
+	if err := ls.Sender.Send(ctx, n); err != nil {
+		ls.Logger.Error(
+			"Failed to send notification",
+			zap.Error(err),
+		)
 		return err
 	}
 
-	ls.Logger.Info("sent", "to", n.Recipient, "channel", n.Channel)
+	ls.Logger.Info(
+		"sent",
+		zap.String("to", n.Recipient),
+		zap.String("channel", n.Channel),
+	)
 
 	return nil
 }
@@ -72,7 +93,10 @@ func NewEmailSender(w io.Writer) *EmailSender {
 	return &EmailSender{w}
 }
 
-func (cs ConsoleSender) Send(ctx context.Context, n domain.Notification) error {
+func (cs ConsoleSender) Send(
+	ctx context.Context,
+	n domain.Notification,
+) error {
 	_, err := fmt.Fprintf(cs.w, "[console] to %s | %s\n", n.Recipient, n.Subject)
 	return err
 }

@@ -4,27 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 	"uuid"
 
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 
 	"notifier/internal/core/domain"
+	core_logger "notifier/internal/core/logger"
 	"notifier/internal/repository"
 )
 
 type CachedNotificationRepo struct {
 	repo   repository.NotificationRepo
 	redis  *redis.Client
-	logger *slog.Logger
+	logger *core_logger.Logger
 	ttl    time.Duration
 }
 
 func NewCachedNotificationRepo(
 	repo repository.NotificationRepo,
 	redis *redis.Client,
-	logger *slog.Logger,
+	logger *core_logger.Logger,
 	ttl time.Duration,
 ) *CachedNotificationRepo {
 	return &CachedNotificationRepo{
@@ -36,7 +37,10 @@ func NewCachedNotificationRepo(
 }
 
 // MARK: - `NotificationRepo` interface implementation
-func (r *CachedNotificationRepo) Save(ctx context.Context, n domain.Notification) (int, error) {
+func (r *CachedNotificationRepo) Save(
+	ctx context.Context,
+	n domain.Notification,
+) (int, error) {
 	const op = "CachedNotificationRepo.Save"
 
 	id, err := r.repo.Save(ctx, n)
@@ -45,7 +49,11 @@ func (r *CachedNotificationRepo) Save(ctx context.Context, n domain.Notification
 	}
 
 	if cacheErr := r.invalidateNotificationCache(ctx, id); cacheErr != nil {
-		r.logger.Warn("invalidate cache", "op", op, "error", cacheErr)
+		r.logger.Warn(
+			"invalidate cache",
+			zap.String("op", op),
+			zap.Error(cacheErr),
+		)
 	}
 
 	return id, nil
@@ -65,7 +73,11 @@ func (r *CachedNotificationRepo) SaveIdempotent(
 	}
 
 	if err := r.invalidateNotificationCache(ctx, id); err != nil {
-		r.logger.Warn("invalidate cache", "op", op, "error", err)
+		r.logger.Warn(
+			"invalidate cache",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 	}
 
 	return id, nil
@@ -75,7 +87,11 @@ func (r *CachedNotificationRepo) GetAll(ctx context.Context) ([]domain.Notificat
 	return r.repo.GetAll(ctx)
 }
 
-func (r *CachedNotificationRepo) GetList(ctx context.Context, page int, size int) ([]domain.Notification, error) {
+func (r *CachedNotificationRepo) GetList(
+	ctx context.Context,
+	page int,
+	size int,
+) ([]domain.Notification, error) {
 	const op = "CachedNotificationRepo.GetList"
 
 	key := notificationsListCacheKey(page, size)
@@ -96,14 +112,21 @@ func (r *CachedNotificationRepo) GetList(ctx context.Context, page int, size int
 	if data, marshalErr := json.Marshal(result); marshalErr == nil {
 		setErr := r.redis.Set(ctx, key, data, r.ttl).Err()
 		if setErr != nil {
-			r.logger.Warn("set to cache", "op", op, "error", setErr)
+			r.logger.Warn(
+				"set to cache",
+				zap.String("op", op),
+				zap.Error(setErr),
+			)
 		}
 	}
 
 	return result, nil
 }
 
-func (r *CachedNotificationRepo) GetById(ctx context.Context, id int) (domain.Notification, error) {
+func (r *CachedNotificationRepo) GetById(
+	ctx context.Context,
+	id int,
+) (domain.Notification, error) {
 	const op = "CachedNotificationRepo.GetById"
 
 	key := notificationCacheKey(id)
@@ -124,14 +147,21 @@ func (r *CachedNotificationRepo) GetById(ctx context.Context, id int) (domain.No
 	if data, marshalErr := json.Marshal(n); marshalErr == nil {
 		setErr := r.redis.Set(ctx, key, data, r.ttl).Err()
 		if setErr != nil {
-			r.logger.Warn("set to cache", "op", op, "error", setErr)
+			r.logger.Warn(
+				"set to cache",
+				zap.String("op", op),
+				zap.Error(setErr),
+			)
 		}
 	}
 
 	return n, nil
 }
 
-func (r *CachedNotificationRepo) DeleteById(ctx context.Context, id int) error {
+func (r *CachedNotificationRepo) DeleteById(
+	ctx context.Context,
+	id int,
+) error {
 	const op = "CachedNotificationRepo.DeleteById"
 
 	if err := r.repo.DeleteById(ctx, id); err != nil {
@@ -139,13 +169,21 @@ func (r *CachedNotificationRepo) DeleteById(ctx context.Context, id int) error {
 	}
 
 	if cacheErr := r.invalidateNotificationCache(ctx, id); cacheErr != nil {
-		r.logger.Warn("invalidate cache failed", "op", op, "error", cacheErr)
+		r.logger.Warn(
+			"invalidate cache failed",
+			zap.String("op", op),
+			zap.Error(cacheErr),
+		)
 	}
 
 	return nil
 }
 
-func (r *CachedNotificationRepo) UpdateStatus(ctx context.Context, id int, status string) error {
+func (r *CachedNotificationRepo) UpdateStatus(
+	ctx context.Context,
+	id int,
+	status string,
+) error {
 	const op = "CachedNotificationRepo.UpdateStatus"
 
 	if err := r.repo.UpdateStatus(ctx, id, status); err != nil {
@@ -153,7 +191,11 @@ func (r *CachedNotificationRepo) UpdateStatus(ctx context.Context, id int, statu
 	}
 
 	if cacheErr := r.invalidateNotificationCache(ctx, id); cacheErr != nil {
-		r.logger.Warn("invalidate cache failed", "op", op, "error", cacheErr)
+		r.logger.Warn(
+			"invalidate cache failed",
+			zap.String("op", op),
+			zap.Error(cacheErr),
+		)
 	}
 
 	return nil

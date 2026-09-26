@@ -1,5 +1,9 @@
 .DEFAULT_GOAL := help
 
+# абсолютный путь к корню git-репозитория (не зависит ни от того, откуда
+# вызван `make`, ни от того, где физически лежит этот Makefile)
+PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
+
 BINARY_NAME := notifier
 MAIN_PKG := ./cmd/notifier
 BINARY := bin/$(BINARY_NAME)
@@ -19,7 +23,7 @@ ENV_FILE ?= .env
 # задаёт переменную (например, на чистом чекауте без cp .env.example .env)
 PORT ?= 8080
 JWT_SECRET ?= devsecret
-LOG_LEVEL ?= info
+LOG_LEVEL ?= INFO
 
 export
 
@@ -27,13 +31,14 @@ export
 	migrate-build migrate-up migrate-down migrate-version migrate-create proto
 
 build: ## собрать бинарник в bin/
-	go build -o $(BINARY) $(MAIN_PKG)
+	@go build -o $(BINARY) $(MAIN_PKG)
 
 run: build ## собрать и запустить сервис локально (переменные из $(ENV_FILE))
+	@export LOG_FOLDER=$(PROJECT_ROOT)/out/logs && \
 	$(BINARY)
 
 migrate-build: ## собрать бинарник миграций в bin/
-	go build -o $(MIGRATE_BINARY) $(MIGRATE_PKG)
+	@go build -o $(MIGRATE_BINARY) $(MIGRATE_PKG)
 
 migrate-up: migrate-build ## применить все непринятые миграции (к $(ENV_FILE))
 	$(MIGRATE_BINARY) up
@@ -74,6 +79,10 @@ docker-build: ## собрать docker-образ сервиса
 	docker compose --env-file $(ENV_FILE) build
 
 docker-up: ## пересобрать и поднять сервис вместе с базой
+	# создаём заранее от текущего пользователя — иначе Docker создаст volume-
+	# директорию сам от root, и notifier (UID 65532 в контейнере) не сможет
+	# в неё писать (см. Dockerfile: `USER 65532:65532`)
+	@mkdir -p $(PROJECT_ROOT)/out/logs
 	docker compose --env-file $(ENV_FILE) up -d --build
 
 docker-start: ## запустить ранее остановленные контейнеры без пересборки

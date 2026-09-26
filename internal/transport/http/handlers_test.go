@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +12,7 @@ import (
 
 	"notifier/internal/audit"
 	"notifier/internal/core/domain"
+	core_logger "notifier/internal/core/logger"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 	"notifier/internal/service"
@@ -44,16 +43,28 @@ func newTestHandler(
 	t.Helper()
 
 	repo := repository.NewMemoryRepository()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger, _ := core_logger.NewLogger(core_logger.NewConfigMust())
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 
-	notificationService, err := service.NewNotificationService(repo, senders, auditLogger, logger)
+	notificationService, err := service.NewNotificationService(
+		repo,
+		senders,
+		auditLogger,
+		// logger,
+	)
 	if err != nil {
 		t.Fatalf("NewNotificationService() error: %s", err)
 	}
 	healthService := service.NewHealthService(pingerDB, pingerCache)
 
-	return NewNotificationsHTTPHandler(notificationService, healthService, logger, "Notifier", "test"), repo
+	return NewNotificationsHTTPHandler(
+		notificationService,
+		healthService,
+		logger,
+		"Notifier",
+		"test",
+	), repo
 }
 
 func TestHealthHandler(t *testing.T) {

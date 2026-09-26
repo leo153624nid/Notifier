@@ -8,8 +8,8 @@ import (
 )
 
 type Config struct {
-	Addr            string `envconfig:"HTTP_ADDR" required:"true"`
-	ShutdownTimeout time.Duration
+	Port            string        `envconfig:"PORT" required:"true"`
+	ShutdownTimeout time.Duration `envconfig:"SHUTDOWN_TIMEOUT" required:"true"`
 }
 
 func NewConfig() (Config, error) {
@@ -17,7 +17,7 @@ func NewConfig() (Config, error) {
 
 	var cfg Config
 
-	if err := envconfig.Process("", &cfg); err != nil {
+	if err := envconfig.Process("HTTP", &cfg); err != nil {
 		return Config{}, fmt.Errorf("%s: process: %w", op, err)
 	}
 

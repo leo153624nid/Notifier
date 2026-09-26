@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"notifier/internal/core/domain"
+
+	"go.uber.org/zap"
 )
 
 func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.Request) {
@@ -18,9 +20,13 @@ func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.
 	defer cancelDB()
 
 	if err := h.health.CheckDB(ctxDB); err != nil {
-		h.logger.Error("db health check failed", "op", op, "error", err)
+		h.logger.Error(
+			"db health check failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "service unavailable", "error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "database unavailable", "error": err.Error()})
 		return
 	}
 
@@ -28,7 +34,11 @@ func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.
 	defer cancelCache()
 
 	if err := h.health.CheckCache(ctxCache); err != nil {
-		h.logger.Error("cache health check failed", "op", op, "error", err)
+		h.logger.Error(
+			"cache health check failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "cache unavailable", "error": err.Error()})
 		return
@@ -42,7 +52,11 @@ func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.
 
 	js, err := json.Marshal(resp)
 	if err != nil {
-		h.logger.Error("marshal failed", "op", op, "error", err)
+		h.logger.Error(
+			"marshal failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -68,14 +82,22 @@ func (h *NotificationsHTTPHandler) getNotification(w http.ResponseWriter, r *htt
 			return
 		}
 
-		h.logger.Error("get notification failed", "op", op, "error", err)
+		h.logger.Error(
+			"get notification failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
 	js, err := json.Marshal(toNotificationResponse(n))
 	if err != nil {
-		h.logger.Error("marshal failed", "op", op, "error", err)
+		h.logger.Error(
+			"marshal failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -101,7 +123,11 @@ func (h *NotificationsHTTPHandler) deleteNotification(w http.ResponseWriter, r *
 			return
 		}
 
-		h.logger.Error("delete notification failed", "op", op, "error", delErr)
+		h.logger.Error(
+			"delete notification failed",
+			zap.String("op", op),
+			zap.Error(delErr),
+		)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -118,14 +144,22 @@ func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *h
 
 	notifications, err := h.notifications.List(r.Context(), page, size)
 	if err != nil {
-		h.logger.Error("list notifications failed", "op", op, "error", err)
+		h.logger.Error(
+			"list notifications failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 
 	js, err := json.Marshal(toNotificationResponses(notifications))
 	if err != nil {
-		h.logger.Error("marshal failed", "op", op, "error", err)
+		h.logger.Error(
+			"marshal failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -139,7 +173,11 @@ func (h *NotificationsHTTPHandler) exportNotification(w http.ResponseWriter, r *
 
 	count, err := h.notifications.Export(r.Context())
 	if err != nil {
-		h.logger.Error("export failed", "op", op, "error", err)
+		h.logger.Error(
+			"export failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
 		SendJSONError(w, "internal error", http.StatusInternalServerError)
 		return
 	}
