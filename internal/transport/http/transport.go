@@ -3,9 +3,11 @@ package transport_http
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"uuid"
 
 	"notifier/internal/core/domain"
+	core_http_server "notifier/internal/core/transport/http/server"
 )
 
 // Handler отвечает за перевод HTTP-запросов в вызовы сервисного слоя и обратно.
@@ -74,5 +76,16 @@ func NewNotificationsHTTPHandler(
 		logger:        logger,
 		appName:       appName,
 		appVersion:    appVersion,
+	}
+}
+
+func (h *NotificationsHTTPHandler) Routes() []core_http_server.Route {
+	return []core_http_server.Route{
+		{
+			Method:  http.MethodGet,
+			Path:    "/health",
+			Handler: h.healthHandler,
+		},
+		// TODO
 	}
 }

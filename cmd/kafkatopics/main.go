@@ -10,7 +10,7 @@ package main
 import (
 	"fmt"
 
-	"notifier/internal/core/config"
+	core_config "notifier/internal/core/config"
 )
 
 // defaultPartitions/defaultReplicationFactor — значения для локального
@@ -22,7 +22,7 @@ const (
 )
 
 func main() {
-	cfg := config.LoadKafkaConfig()
+	cfg := core_config.LoadKafkaConfig()
 
 	topics := []string{cfg.LoginTopic, cfg.DLQTopic}
 

@@ -17,7 +17,7 @@ import (
 
 	"notifier/internal/audit"
 	"notifier/internal/cache"
-	"notifier/internal/core/config"
+	core_config "notifier/internal/core/config"
 	cached_repo "notifier/internal/repository/cache"
 	"notifier/internal/repository/postgres"
 	"notifier/internal/sender"
@@ -54,7 +54,7 @@ func parseLevel(s string) slog.Level {
 }
 
 func main() {
-	cfg, err := config.Load()
+	cfg, err := core_config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "config: %s\n", err)
 		os.Exit(1)
@@ -63,16 +63,16 @@ func main() {
 	opts := &slog.HandlerOptions{Level: parseLevel(cfg.LogLevel)}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, opts)).With("service", appName, "version", appVersion)
 
-	ctxInit, cancelInit := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelInit()
+	ctxDbInit, cancelDbInit := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelDbInit()
 
-	db, err := pgxpool.New(ctxInit, cfg.DSN)
+	db, err := pgxpool.New(ctxDbInit, cfg.DSN)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pgxpool.new: %s\n", err)
 		os.Exit(1)
 	}
 
-	err = db.Ping(ctxInit)
+	err = db.Ping(ctxDbInit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "db ping failed: %s\n", err)
 		os.Exit(1)
@@ -147,11 +147,6 @@ func main() {
 		logger,
 	)
 
-	// MARK: - Start consumers
-	logger.Info("starting consumers")
-	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	go loginConsumer.Run(consumerCtx)
-
 	// MARK: - Start http server
 	go func() {
 		logger.Info("starting http server", "port", cfg.Port)
@@ -170,6 +165,11 @@ func main() {
 			logger.Error("Error starting grpc server", "error", err)
 		}
 	}()
+
+	// MARK: - Start consumers
+	logger.Info("starting consumers")
+	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+	go loginConsumer.Run(consumerCtx)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

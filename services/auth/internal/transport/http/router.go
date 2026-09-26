@@ -19,7 +19,7 @@ func NewRouter(h *Handler, logger *slog.Logger) *Router {
 	rateLimit := rateLimiterMiddleware(ipLimiter)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", h.healthHandler)
+	mux.HandleFunc("GET /api/v1/health", h.healthHandler)
 	mux.Handle("POST /api/v1/auth/register", rateLimit(http.HandlerFunc(h.registerUser)))
 	mux.Handle("POST /api/v1/auth/login", rateLimit(http.HandlerFunc(h.loginUser)))
 	mux.Handle("POST /api/v1/auth/refresh", rateLimit(http.HandlerFunc(h.refreshToken)))

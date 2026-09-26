@@ -21,7 +21,7 @@ func NewRouter(h *NotificationsHTTPHandler, jwtSecret string, logger *slog.Logge
 	rateLimit := rateLimiterMiddleware(ipLimiter)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", h.healthHandler)
+	mux.HandleFunc("GET /api/v1/health", h.healthHandler)
 	mux.Handle("GET /api/v1/notifications", rateLimit(auth(http.HandlerFunc(h.listNotifications))))
 	mux.Handle("GET /api/v1/notifications/export", rateLimit(auth(http.HandlerFunc(h.exportNotification))))
 	mux.Handle("GET /api/v1/notifications/{id}", rateLimit(auth(http.HandlerFunc(h.getNotification))))
