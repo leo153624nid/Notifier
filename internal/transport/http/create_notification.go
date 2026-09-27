@@ -1,11 +1,8 @@
 package transport_http
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
-
-	"go.uber.org/zap"
 
 	"notifier/internal/core/domain"
 	core_errors "notifier/internal/core/errors"
@@ -25,13 +22,13 @@ type CreateNotificationRequest struct {
 type CreateNotificationResponse NotificationResponse
 
 func (r CreateNotificationRequest) toDomain() domain.Notification {
-	return domain.Notification{
-		Recipient: r.To,
-		Subject:   r.Subject,
-		Body:      r.Body,
-		Channel:   r.Channel,
-		IsUrgent:  r.Urgent,
-	}
+	return domain.NewNotificationUninitialized(
+		r.To,
+		r.Subject,
+		r.Body,
+		r.Channel,
+		r.Urgent,
+	)
 }
 
 func toCreateNotificationResponse(n domain.Notification) CreateNotificationResponse {
@@ -47,15 +44,13 @@ func toCreateNotificationResponse(n domain.Notification) CreateNotificationRespo
 }
 
 func (h *NotificationsHTTPHandler) createNotification(w http.ResponseWriter, r *http.Request) {
-	const op = "NotificationsHTTPHandler.createNotification"
-
 	ctx := r.Context()
 	logger := core_logger.FromContext(ctx)
-	responseHandler := core_http_response.NewHTTPResponseHandler(logger, w)
+	rh := core_http_response.NewHTTPResponseHandler(logger, w)
 
 	var req CreateNotificationRequest
 	if err := core_http_request.DecodeAndValidateRequest(r, &req); err != nil {
-		responseHandler.ErrorResponse("decode and validate request failed", err)
+		rh.ErrorResponse("decode and validate request failed", err)
 		return
 	}
 
@@ -63,31 +58,15 @@ func (h *NotificationsHTTPHandler) createNotification(w http.ResponseWriter, r *
 	if createErr != nil {
 		switch {
 		case errors.Is(createErr, core_errors.ErrInvalidNotification):
-			responseHandler.ErrorResponse("invalid request", core_errors.ErrInvalidNotification)
+			rh.ErrorResponse("invalid request", core_errors.ErrInvalidNotification)
 		case errors.Is(createErr, core_errors.ErrUnsupportedChannel):
-			responseHandler.ErrorResponse("invalid request: unsupported channel", core_errors.ErrUnsupportedChannel)
+			rh.ErrorResponse("invalid request: unsupported channel", core_errors.ErrUnsupportedChannel)
 		default:
-			logger.Error(
-				"create notification failed",
-				zap.String("op", op),
-				zap.Error(createErr),
-			)
-			responseHandler.ErrorResponse("internal error", createErr)
+			rh.ErrorResponse("create notification failed", createErr)
 		}
 		return
 	}
 
-	js, marshalErr := json.Marshal(toCreateNotificationResponse(n))
-	if marshalErr != nil {
-		logger.Error(
-			"marshal failed",
-			zap.String("op", op),
-			zap.Error(marshalErr),
-		)
-		responseHandler.ErrorResponse("internal error", marshalErr)
-		return
-	}
-
-	w.WriteHeader(http.StatusAccepted)
-	_, _ = w.Write(js)
+	resp := toCreateNotificationResponse(n)
+	rh.JSONResponse(resp, http.StatusAccepted)
 }

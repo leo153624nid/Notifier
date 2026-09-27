@@ -1,10 +1,11 @@
 package transport_http
 
 import (
-	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"notifier/internal/core/domain"
+	core_logger "notifier/internal/core/logger"
 	core_http_response "notifier/internal/core/transport/http/response"
 )
 
@@ -30,7 +31,7 @@ func toNotificationResponse(n domain.Notification) NotificationResponse {
 	}
 }
 
-func toNotificationResponses(notifications []domain.Notification) []NotificationResponse {
+func toListNotificationResponse(notifications []domain.Notification) []NotificationResponse {
 	result := make([]NotificationResponse, len(notifications))
 	for i, n := range notifications {
 		result[i] = toNotificationResponse(n)
@@ -38,19 +39,21 @@ func toNotificationResponses(notifications []domain.Notification) []Notification
 	return result
 }
 
-type HealthResponse struct {
-	App     string `json:"app"`
-	Version string `json:"version"`
-	Status  string `json:"status"`
-}
+func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logger := core_logger.FromContext(ctx)
+	rh := core_http_response.NewHTTPResponseHandler(logger, w)
 
-type ExportResponse struct {
-	Exported int `json:"exported"`
-}
+	query := r.URL.Query()
+	page, _ := strconv.Atoi(query.Get("page"))
+	size, _ := strconv.Atoi(query.Get("size"))
 
-func SendJSONError(w http.ResponseWriter, message string, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+	notifications, err := h.notifications.List(ctx, page, size)
+	if err != nil {
+		rh.ErrorResponse("get notifications list failed", err)
+		return
+	}
 
-	_ = json.NewEncoder(w).Encode(core_http_response.APIError{Error: message})
+	resp := toListNotificationResponse(notifications)
+	rh.JSONResponse(resp, http.StatusOK)
 }

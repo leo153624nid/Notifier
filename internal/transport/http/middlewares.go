@@ -12,10 +12,10 @@ import (
 	"time"
 	"uuid"
 
-	core_http_response "notifier/internal/core/transport/http/response"
-
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"
+
+	core_http_response "notifier/internal/core/transport/http/response"
 )
 
 // MARK: - RateLimiter
@@ -95,7 +95,13 @@ func rateLimiterMiddleware(limiter *ipRateLimiter) func(http.Handler) http.Handl
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			clientLimiter := limiter.getLimiter(clientIP(r))
 			if !clientLimiter.Allow() {
-				SendJSONError(w, "too many requests", http.StatusTooManyRequests)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+
+				resp := core_http_response.APIError{
+					Message: "too many requests",
+				}
+				_ = json.NewEncoder(w).Encode(resp)
 				return
 			}
 

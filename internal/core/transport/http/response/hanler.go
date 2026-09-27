@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.uber.org/zap"
+
 	core_errors "notifier/internal/core/errors"
 	core_logger "notifier/internal/core/logger"
-
-	"go.uber.org/zap"
 )
 
 type APIError struct {
@@ -29,6 +29,17 @@ func NewHTTPResponseHandler(
 	return &HTTPResponseHandler{
 		logger: l,
 		rw:     rw,
+	}
+}
+
+func (h *HTTPResponseHandler) JSONResponse(
+	responseBody any,
+	statusCode int,
+) {
+	h.rw.WriteHeader(statusCode)
+
+	if err := json.NewEncoder(h.rw).Encode(responseBody); err != nil {
+		h.logger.Error("write HTTP response", zap.Error(err))
 	}
 }
 
@@ -56,6 +67,10 @@ func (h *HTTPResponseHandler) ErrorResponse(msg string, err error) {
 		logFunc = h.logger.Debug
 
 	case errors.Is(err, core_errors.ErrConflict):
+		statusCode = http.StatusConflict
+		logFunc = h.logger.Warn
+
+	case errors.Is(err, core_errors.ErrEventAlreadyProcessed):
 		statusCode = http.StatusConflict
 		logFunc = h.logger.Warn
 
@@ -94,14 +109,10 @@ func (h *HTTPResponseHandler) errorResponse(
 	err error,
 	msg string,
 ) {
-	h.rw.WriteHeader(statusCode)
-
 	response := APIError{
 		Message: msg,
 		Error:   err.Error(),
 	}
 
-	if err := json.NewEncoder(h.rw).Encode(response); err != nil {
-		h.logger.Error("failed encode error response", zap.Error(err))
-	}
+	h.JSONResponse(response, statusCode)
 }

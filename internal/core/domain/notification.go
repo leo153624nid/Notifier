@@ -15,6 +15,44 @@ type Notification struct { // TODO: add version ?
 	IsUrgent  bool   `json:"urgent"`
 }
 
+func NewNotification(
+	id int,
+	recipient string,
+	subject string,
+	body string,
+	channel string,
+	status string,
+	isUrgent bool,
+) Notification {
+	return Notification{
+		ID:        id,
+		Recipient: recipient,
+		Subject:   subject,
+		Body:      body,
+		Channel:   channel,
+		IsUrgent:  isUrgent,
+		Status:    status,
+	}
+}
+
+func NewNotificationUninitialized(
+	recipient string,
+	subject string,
+	body string,
+	channel string,
+	isUrgent bool,
+) Notification {
+	return NewNotification(
+		UninitializedID,
+		recipient,
+		subject,
+		body,
+		channel,
+		UninitializedStatus,
+		isUrgent,
+	)
+}
+
 func (n Notification) Validate() error {
 	const op = "Notification.Validate"
 
