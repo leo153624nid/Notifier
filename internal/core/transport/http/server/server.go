@@ -57,42 +57,42 @@ func (srv *HTTPServer) Run(ctx context.Context) error {
 		IdleTimeout:       serverIdleTimeout,
 	}
 
-	ch := make(chan error, 1)
+	errCh := make(chan error, 1)
 
 	go func() {
-		defer close(ch)
+		defer close(errCh)
 
 		srv.logger.Warn(
-			"start HTTP server",
+			"start HTTP server ...",
 			zap.String("port", srv.config.Port),
 		)
 
 		err := server.ListenAndServe()
 		if !errors.Is(err, http.ErrServerClosed) {
-			ch <- err
+			errCh <- err
 		}
 	}()
 
 	select {
-	case err := <-ch:
+	case err := <-errCh:
 		if err != nil {
 			return fmt.Errorf("listen and serve HTTP: %w", err)
 		}
 	case <-ctx.Done():
-		srv.logger.Warn("shutdown HTTP server...")
+		srv.logger.Warn("shutdown HTTP server ...")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), srv.config.ShutdownTimeout)
 		defer cancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			srv.logger.Error(
-				"failed to shutdownd",
+				"failed to shutdown HTTP server",
 				zap.Error(err),
 			)
 
 			_ = server.Close()
 
-			return fmt.Errorf("shutdown HTTP server: %w", err)
+			return fmt.Errorf("error shutdown HTTP server: %w", err)
 		}
 
 		srv.logger.Warn("HTTP server stopped")

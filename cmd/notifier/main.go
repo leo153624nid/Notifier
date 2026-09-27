@@ -29,15 +29,17 @@ import (
 const (
 	appVersion = "0.3.0"
 	appName    = "Notifier"
+
+	shutdownTimeout = 30 * time.Second
 )
 
 func main() {
-	ctx, cancel := signal.NotifyContext(
+	runCtx, runCancel := signal.NotifyContext(
 		context.Background(),
 		syscall.SIGTERM,
 		syscall.SIGINT,
 	)
-	defer cancel()
+	defer runCancel()
 
 	logger, loggerErr := core_logger.NewLogger(
 		core_logger.NewConfigMust(),
@@ -51,7 +53,7 @@ func main() {
 		zap.String("app", appName),
 		zap.String("version", appVersion),
 	)
-	logger.Warn("starting notifier app")
+	logger.Warn("start notifier app ...")
 
 	cfg, cfgErr := core_config.Load()
 	if cfgErr != nil {
@@ -60,7 +62,7 @@ func main() {
 	}
 
 	// MARK: - Start DB connection
-	logger.Warn("starting database connection")
+	logger.Warn("start database connection ...")
 
 	ctxDbInit, cancelDbInit := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelDbInit()
@@ -85,7 +87,8 @@ func main() {
 
 	postgresRepo := postgres.NewPostgresRepository(db, logger)
 
-	// MARK: Init cache client
+	// MARK: Start cache client
+	logger.Warn("start cache client ...")
 	ctxRedisInit, cancelRedisInit := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelRedisInit()
 
@@ -104,6 +107,7 @@ func main() {
 			zap.Error(errRedis),
 		)
 	}
+	logger.Warn("cache client connected")
 
 	repo := cached_repo.NewCachedNotificationRepo(
 		postgresRepo,
@@ -120,14 +124,17 @@ func main() {
 
 	auditLogger := audit.NewLogger(cfg.AuditLogPath)
 
-	notificationService, err := service.NewNotificationService(
+	notificationService, serviceErr := service.NewNotificationService(
 		repo,
 		senders,
 		auditLogger,
 		// logger,
 	)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "service: %s\n", err)
+	if serviceErr != nil {
+		logger.Error(
+			"notifications service init failed",
+			zap.Error(serviceErr),
+		)
 		os.Exit(1)
 	}
 
@@ -143,6 +150,15 @@ func main() {
 		appName,
 		appVersion,
 	)
+	notificationsRoutes := notificationsTransportHTTP.Routes()
+	notificationsApiVersionRouter := core_http_server.NewApiVersionRouter(core_http_server.ApiVersion1)
+	notificationsApiVersionRouter.RegisterRoutes(notificationsRoutes...)
+
+	httpServer := core_http_server.NewHTTPServer(
+		core_http_server.NewConfigMust(),
+		logger,
+	)
+	httpServer.RegisterApiRoutes(notificationsApiVersionRouter)
 
 	grpcServer := transport_grpc.NewGRPCServer(notificationService, logger)
 	grpcCfg := transport_grpc.LoadConfig()
@@ -165,20 +181,20 @@ func main() {
 		logger,
 	)
 
-	notificationsRoutes := notificationsTransportHTTP.Routes()
-	notificationsApiVersionRouter := core_http_server.NewApiVersionRouter(core_http_server.ApiVersion1)
-	notificationsApiVersionRouter.RegisterRoutes(notificationsRoutes...)
-
-	httpServer := core_http_server.NewHTTPServer(
-		core_http_server.NewConfigMust(),
-		logger,
-	)
-	httpServer.RegisterApiRoutes(notificationsApiVersionRouter)
+	// MARK: - Start HTTP server
+	go func() {
+		if err := httpServer.Run(runCtx); err != nil { // freeze here
+			logger.Error(
+				"HTTP server run error",
+				zap.Error(err),
+			)
+		}
+	}()
 
 	// MARK: - Start gRPC server
 	go func() {
 		logger.Warn(
-			"starting gRPC server",
+			"start gRPC server ...",
 			zap.String("port", grpcCfg.GRPCPort),
 		)
 
@@ -191,38 +207,19 @@ func main() {
 	}()
 
 	// MARK: - Start consumers
-	logger.Warn("starting consumers")
+	logger.Warn("start consumers ...")
 
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
 	go loginConsumer.Run(consumerCtx)
 
-	// MARK: - Start HTTP server
-	if err := httpServer.Run(ctx); err != nil { // freeze here
-		logger.Error(
-			"HTTP server run error",
-			zap.Error(err),
-		)
-	}
-
 	// MARK: Wait interrupt signal
-	sig := make(chan os.Signal, 1) // TODO: delete ?
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-runCtx.Done() // freeze here and waiting signal
+	logger.Warn("shutdown signal received")
 
-	received := <-sig // freeze here and waiting signal
-	logger.Warn(
-		"shutdown signal received",
-		zap.String("signal", received.String()),
-	)
-
-	shutDownCtx, shutDownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutDownCtx, shutDownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutDownCancel()
 
-	// logger.Warn("shutting down http server")
-	// if err := srv.Shutdown(shutDownCtx); err != nil {
-	// 	logger.Error("http server shutdown failed", "error", err)
-	// }
-
-	logger.Warn("shutting down consumers")
+	logger.Warn("shutdown consumers ...")
 	consumerCancel()
 	if err := loginConsumer.Close(shutDownCtx); err != nil {
 		logger.Error(
@@ -231,21 +228,22 @@ func main() {
 		)
 	}
 
-	logger.Warn("shutting down grpc server")
+	logger.Warn("shutdown down gRPC server ...")
 	grpcServer.GracefulStop()
 
-	logger.Warn("waiting for background tasks")
+	logger.Debug("waiting for background tasks ...")
 	notificationService.Wait()
 
 	// router.Stop() // TODO
 
-	logger.Warn("closing database")
+	logger.Debug("close cache ...")
 	if err := cacheRepo.Close(); err != nil {
 		logger.Error(
 			"closing cache repo failed",
 			zap.Error(err),
 		)
 	}
+	logger.Debug("close database ...")
 	db.Close()
 
 	logger.Warn("shutdown completed")
