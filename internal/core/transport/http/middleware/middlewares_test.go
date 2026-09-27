@@ -1,9 +1,7 @@
-package transport_http
+package core_http_middleware
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,10 +15,10 @@ import (
 )
 
 func TestRateLimiterMiddleware_AllowsWithinBurst(t *testing.T) {
-	limiter := newIPRateLimiter(rate.Limit(1), 2)
+	limiter := NewIPRateLimiter(rate.Limit(1), 2)
 	defer limiter.Stop()
 
-	handler := rateLimiterMiddleware(limiter)(okHandler())
+	handler := RateLimiter(limiter)(okHandler())
 
 	for i := 0; i < 2; i++ {
 		w := httptest.NewRecorder()
@@ -35,10 +33,10 @@ func TestRateLimiterMiddleware_AllowsWithinBurst(t *testing.T) {
 }
 
 func TestRateLimiterMiddleware_RejectsOverBurst(t *testing.T) {
-	limiter := newIPRateLimiter(rate.Limit(1), 2)
+	limiter := NewIPRateLimiter(rate.Limit(1), 2)
 	defer limiter.Stop()
 
-	handler := rateLimiterMiddleware(limiter)(okHandler())
+	handler := RateLimiter(limiter)(okHandler())
 
 	// исчерпываем весь burst для одного IP
 	for i := 0; i < 2; i++ {
@@ -65,10 +63,10 @@ func TestRateLimiterMiddleware_RejectsOverBurst(t *testing.T) {
 }
 
 func TestRateLimiterMiddleware_RefillsOverTime(t *testing.T) {
-	limiter := newIPRateLimiter(rate.Limit(100), 1) // ~10ms на восстановление токена
+	limiter := NewIPRateLimiter(rate.Limit(100), 1) // ~10ms на восстановление токена
 	defer limiter.Stop()
 
-	handler := rateLimiterMiddleware(limiter)(okHandler())
+	handler := RateLimiter(limiter)(okHandler())
 	ip := "1.2.3.4:1111"
 
 	w := httptest.NewRecorder()
@@ -93,10 +91,10 @@ func TestRateLimiterMiddleware_RefillsOverTime(t *testing.T) {
 }
 
 func TestRateLimiterMiddleware_IsolatesByIP(t *testing.T) {
-	limiter := newIPRateLimiter(rate.Limit(1), 1)
+	limiter := NewIPRateLimiter(rate.Limit(1), 1)
 	defer limiter.Stop()
 
-	handler := rateLimiterMiddleware(limiter)(okHandler())
+	handler := RateLimiter(limiter)(okHandler())
 
 	// первый IP исчерпывает свой лимит
 	w := httptest.NewRecorder()
@@ -170,7 +168,6 @@ func newTestTokenWithType(t *testing.T, userID uuid.UUID, secret string, ttl tim
 func TestAuthMiddleware_AllowsValidToken(t *testing.T) {
 	secret := "test-secret"
 	userID := uuid.New()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	var gotUserID uuid.UUID
 	var gotOK bool
@@ -179,7 +176,7 @@ func TestAuthMiddleware_AllowsValidToken(t *testing.T) {
 		gotUserID, gotOK = getUserID(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := authMiddleware(secret, logger)(next)
+	handler := Auth(secret)(next)
 
 	tok := newTestToken(t, userID, secret, time.Minute)
 
@@ -202,9 +199,8 @@ func TestAuthMiddleware_AllowsValidToken(t *testing.T) {
 
 func TestAuthMiddleware_Rejects(t *testing.T) {
 	secret := "test-secret"
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	handler := authMiddleware(secret, logger)(okHandler())
+	handler := Auth(secret)(okHandler())
 
 	tests := []struct {
 		name   string

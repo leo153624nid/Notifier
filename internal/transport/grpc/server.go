@@ -18,7 +18,7 @@ import (
 
 type Router struct {
 	notificationv1.UnimplementedNotificationServiceServer
-	notifications *service.NotificationService
+	notifications *service.NotificationService // TODO: interface
 }
 
 func NewRouter(

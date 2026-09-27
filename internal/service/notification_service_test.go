@@ -17,14 +17,12 @@ func newTestService(t *testing.T, senders map[string]sender.Sender) *Notificatio
 	t.Helper()
 
 	repo := repository.NewMemoryRepository()
-	// logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 
 	s, err := NewNotificationService(
 		repo,
 		senders,
 		auditLogger,
-		// logger,
 	)
 	if err != nil {
 		t.Fatalf("NewNotificationService() error: %s", err)
@@ -35,7 +33,6 @@ func newTestService(t *testing.T, senders map[string]sender.Sender) *Notificatio
 
 func TestNewNotificationService(t *testing.T) {
 	repo := repository.NewMemoryRepository()
-	// logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	senders := map[string]sender.Sender{"console": &sender.MockSender{}}
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 
@@ -47,7 +44,6 @@ func TestNewNotificationService(t *testing.T) {
 		{name: "no repo", wantErr: true},
 		{name: "no senders", wantErr: true},
 		{name: "no auditLogger", wantErr: true},
-		{name: "no logger", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -59,35 +55,24 @@ func TestNewNotificationService(t *testing.T) {
 					nil,
 					senders,
 					auditLogger,
-					// logger,
 				)
 			case "no senders":
 				_, err = NewNotificationService(
 					repo,
 					nil,
 					auditLogger,
-					// logger,
 				)
 			case "no auditLogger":
 				_, err = NewNotificationService(
 					repo,
 					senders,
 					nil,
-					// logger,
-				)
-			case "no logger":
-				_, err = NewNotificationService(
-					repo,
-					senders,
-					auditLogger,
-					// nil,
 				)
 			default:
 				_, err = NewNotificationService(
 					repo,
 					senders,
 					auditLogger,
-					// logger,
 				)
 			}
 

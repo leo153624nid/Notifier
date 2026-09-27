@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 
 	"notifier/internal/audit"
 	"notifier/internal/cache"
@@ -129,7 +130,6 @@ func main() {
 		repo,
 		senders,
 		auditLogger,
-		// logger,
 	)
 	if serviceErr != nil {
 		logger.Error(
@@ -150,8 +150,12 @@ func main() {
 		appName,
 		appVersion,
 	)
+	ipLimiter := core_http_middleware.NewIPRateLimiter(rate.Limit(10), 20)
 	notificationsRoutes := notificationsTransportHTTP.Routes()
-	notificationsApiVersionRouter := core_http_server.NewApiVersionRouter(core_http_server.ApiVersion1)
+	notificationsApiVersionRouter := core_http_server.NewApiVersionRouter(
+		core_http_server.ApiVersion1,
+		ipLimiter,
+	)
 	notificationsApiVersionRouter.RegisterRoutes(notificationsRoutes...)
 
 	httpServer := core_http_server.NewHTTPServer(
@@ -161,6 +165,8 @@ func main() {
 		core_http_middleware.Logger(logger),
 		core_http_middleware.Panic(),
 		core_http_middleware.Trace(),
+		core_http_middleware.RateLimiter(ipLimiter),
+		core_http_middleware.Auth(cfg.JWTSecret),
 	)
 	httpServer.RegisterApiRoutes(notificationsApiVersionRouter)
 
@@ -236,8 +242,7 @@ func main() {
 
 	logger.Debug("waiting for background tasks ...")
 	notificationService.Wait()
-
-	// router.Stop() // TODO
+	notificationsApiVersionRouter.Stop()
 
 	logger.Debug("close cache ...")
 	if err := cacheRepo.Close(); err != nil {

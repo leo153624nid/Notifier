@@ -11,4 +11,5 @@ var (
 	ErrUnsupportedChannel    = errors.New("unsupported channel")
 	ErrConflict              = errors.New("conflict")
 	ErrEventAlreadyProcessed = errors.New("event already processed")
+	ErrAuth                  = errors.New("auth failed")
 )

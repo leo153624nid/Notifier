@@ -43,6 +43,30 @@ func (h *HTTPResponseHandler) JSONResponse(
 	}
 }
 
+func (h *HTTPResponseHandler) AuthErrorResponse(
+	msg string,
+	path string,
+	method string,
+	remoteAddr string,
+	err error,
+) {
+	h.logger.Warn(
+		"auth failed",
+		zap.String("path", path),
+		zap.String("method", method),
+		zap.String("remote", remoteAddr),
+		zap.String("message", msg),
+		zap.Error(err),
+	)
+
+	response := APIError{
+		Error:   err.Error(),
+		Message: msg,
+	}
+
+	h.JSONResponse(response, http.StatusUnauthorized)
+}
+
 func (h *HTTPResponseHandler) ErrorResponse(msg string, err error) {
 	var (
 		statusCode int
@@ -72,6 +96,10 @@ func (h *HTTPResponseHandler) ErrorResponse(msg string, err error) {
 
 	case errors.Is(err, core_errors.ErrEventAlreadyProcessed):
 		statusCode = http.StatusConflict
+		logFunc = h.logger.Warn
+
+	case errors.Is(err, core_errors.ErrAuth):
+		statusCode = http.StatusUnauthorized
 		logFunc = h.logger.Warn
 
 	default:
