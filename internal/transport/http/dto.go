@@ -5,11 +5,8 @@ import (
 	"net/http"
 
 	"notifier/internal/core/domain"
+	core_http_response "notifier/internal/core/transport/http/response"
 )
-
-type APIError struct {
-	Error string `json:"error"`
-}
 
 type NotificationResponse struct {
 	Recipient string `json:"to"`
@@ -55,5 +52,5 @@ func SendJSONError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
-	_ = json.NewEncoder(w).Encode(APIError{Error: message})
+	_ = json.NewEncoder(w).Encode(core_http_response.APIError{Error: message})
 }

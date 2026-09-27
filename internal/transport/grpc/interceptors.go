@@ -30,8 +30,7 @@ func requestIDFromContext(ctx context.Context) string {
 	return id
 }
 
-// requestIDInterceptor кладёт в контекст новый request id на каждый вызов —
-// аналог requestID middleware из internal/transport/http/middlewares.go.
+// requestIDInterceptor кладёт в контекст новый request id на каждый вызов
 func requestIDInterceptor(
 	ctx context.Context,
 	req any,
@@ -44,7 +43,7 @@ func requestIDInterceptor(
 }
 
 // MARK: - Logging and Recovery
-func loggingRecoveryInterceptor(logger *core_logger.Logger) grpc.UnaryServerInterceptor {
+func loggingRecoveryInterceptor(l *core_logger.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req any,
@@ -54,11 +53,15 @@ func loggingRecoveryInterceptor(logger *core_logger.Logger) grpc.UnaryServerInte
 		start := time.Now()
 		reqID := requestIDFromContext(ctx)
 
+		logger := l.With(
+			zap.String("request_id", reqID),
+		)
+		ctx = core_logger.ToContext(ctx, logger)
+
 		defer func() {
 			if p := recover(); p != nil {
 				logger.Error(
 					"panic recovered",
-					zap.String("request_id", reqID),
 					zap.Any("panic", p),
 					zap.String("stack", string(debug.Stack())),
 				)
@@ -72,7 +75,6 @@ func loggingRecoveryInterceptor(logger *core_logger.Logger) grpc.UnaryServerInte
 			"request completed",
 			zap.String("method", info.FullMethod),
 			zap.Duration("duration", time.Since(start)),
-			zap.String("request_id", reqID),
 			zap.Error(err),
 		)
 

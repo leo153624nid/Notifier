@@ -5,15 +5,13 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+	"uuid"
 
 	authevents "contracts/events/auth/v1"
 	"notifier/internal/audit"
-	core_logger "notifier/internal/core/logger"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 	"notifier/internal/service"
-
-	"uuid"
 )
 
 // newTestConsumer собирает LoginConsumer вокруг настоящего
@@ -25,8 +23,6 @@ func newTestConsumer(t *testing.T) (*LoginConsumer, *repository.MemoryRepository
 	t.Helper()
 
 	repo := repository.NewMemoryRepository()
-	// logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	logger, _ := core_logger.NewLogger(core_logger.NewConfigMust())
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 	senders := map[string]sender.Sender{"email": &sender.MockSender{}}
 
@@ -34,7 +30,6 @@ func newTestConsumer(t *testing.T) (*LoginConsumer, *repository.MemoryRepository
 		repo,
 		senders,
 		auditLogger,
-		// logger,
 	)
 	if err != nil {
 		t.Fatalf("NewNotificationService() error: %s", err)
@@ -42,7 +37,6 @@ func newTestConsumer(t *testing.T) (*LoginConsumer, *repository.MemoryRepository
 
 	return &LoginConsumer{
 		service: notifSvc,
-		logger:  logger,
 	}, repo
 }
 
@@ -53,8 +47,6 @@ func newTestConsumerWithSender(t *testing.T) (*LoginConsumer, *repository.Memory
 	t.Helper()
 
 	repo := repository.NewMemoryRepository()
-	// logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	logger, _ := core_logger.NewLogger(core_logger.NewConfigMust())
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 	mockSnd := &sender.MockSender{}
 	senders := map[string]sender.Sender{"email": mockSnd}
@@ -63,7 +55,6 @@ func newTestConsumerWithSender(t *testing.T) (*LoginConsumer, *repository.Memory
 		repo,
 		senders,
 		auditLogger,
-		// logger,
 	)
 	if err != nil {
 		t.Fatalf("NewNotificationService() error: %s", err)
@@ -71,7 +62,6 @@ func newTestConsumerWithSender(t *testing.T) (*LoginConsumer, *repository.Memory
 
 	return &LoginConsumer{
 		service: notifSvc,
-		logger:  logger,
 	}, repo, mockSnd
 }
 

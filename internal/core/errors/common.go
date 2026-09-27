@@ -1,13 +1,14 @@
-package domain
+package core_errors
 
 import (
 	"errors"
 )
 
 var (
-	ErrNotFound              = errors.New("notification not found")
+	ErrNotFound              = errors.New("not found")
+	ErrInvalidArgument       = errors.New("invalid argument")
 	ErrInvalidNotification   = errors.New("invalid notification")
-	ErrInvalidID             = errors.New("invalid notification id")
 	ErrUnsupportedChannel    = errors.New("unsupported channel")
+	ErrConflict              = errors.New("conflict")
 	ErrEventAlreadyProcessed = errors.New("event already processed")
 )

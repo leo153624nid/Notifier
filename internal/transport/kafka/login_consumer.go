@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"uuid"
 
 	authevents "contracts/events/auth/v1"
 	"notifier/internal/core/domain"
+	core_errors "notifier/internal/core/errors"
 	core_logger "notifier/internal/core/logger"
 	"notifier/internal/service"
 
@@ -36,7 +38,6 @@ type LoginConsumer struct {
 	reader    messageReader
 	dlqWriter messageWriter
 	service   *service.NotificationService
-	logger    *core_logger.Logger
 	groupID   string
 
 	// wg отслеживает фактическое завершение горутины Run — Close ждёт её
@@ -52,7 +53,6 @@ func NewLoginConsumer(
 	groupID string,
 	dlqTopic string,
 	service *service.NotificationService,
-	logger *core_logger.Logger,
 ) *LoginConsumer {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: brokers,
@@ -72,25 +72,32 @@ func NewLoginConsumer(
 		reader:    reader,
 		dlqWriter: dlqWriter,
 		service:   service,
-		logger:    logger,
 		groupID:   groupID,
 	}
 }
 
-func (c *LoginConsumer) Run(ctx context.Context) {
-	const op = "Consumer.Run"
+func (c *LoginConsumer) Run(
+	ctx context.Context,
+	l *core_logger.Logger,
+) {
+	const op = "LoginConsumer.Run"
 
 	c.wg.Add(1)
 	defer c.wg.Done()
 
 	for {
+		logger := l.With(
+			zap.String("request_id", uuid.New().String()),
+		)
+		ctx = core_logger.ToContext(ctx, logger)
+
 		msg, err := c.reader.FetchMessage(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
 
-			c.logger.Error(
+			logger.Error(
 				"kafka read failed",
 				zap.String("op", op),
 				zap.Error(err),
@@ -99,14 +106,14 @@ func (c *LoginConsumer) Run(ctx context.Context) {
 		}
 
 		if err := c.handleMessage(ctx, msg.Value); err != nil {
-			c.logger.Error(
+			logger.Error(
 				"handle message failed",
 				zap.String("op", op),
 				zap.Error(err),
 			)
 
 			if dlqErr := c.sendToDLQ(ctx, msg, err); dlqErr != nil {
-				c.logger.Error(
+				logger.Error(
 					"failed to send msg to dlq",
 					zap.String("op", op),
 					zap.Error(dlqErr),
@@ -115,7 +122,7 @@ func (c *LoginConsumer) Run(ctx context.Context) {
 			}
 		}
 		if err := c.reader.CommitMessages(ctx, msg); err != nil {
-			c.logger.Error(
+			logger.Error(
 				"failed to commit msg",
 				zap.String("op", op),
 				zap.Error(err),
@@ -128,6 +135,8 @@ func (c *LoginConsumer) Run(ctx context.Context) {
 // и создаёт по нему уведомление.
 func (c *LoginConsumer) handleMessage(ctx context.Context, value []byte) error {
 	const op = "LoginConsumer.handleMessage"
+
+	logger := core_logger.FromContext(ctx)
 
 	var event authevents.UserLoggedIn
 	if err := json.Unmarshal(value, &event); err != nil {
@@ -142,10 +151,10 @@ func (c *LoginConsumer) handleMessage(ctx context.Context, value []byte) error {
 		IsUrgent:  true,
 	}
 
-	_, createErr := c.service.CreateIdempotent(ctx, c.groupID, event.EventID, n, event.EventID.String())
+	_, createErr := c.service.CreateIdempotent(ctx, c.groupID, event.EventID, n)
 	if createErr != nil {
-		if errors.Is(createErr, domain.ErrEventAlreadyProcessed) {
-			c.logger.Info(
+		if errors.Is(createErr, core_errors.ErrEventAlreadyProcessed) {
+			logger.Info(
 				"duplicate login event skipped",
 				zap.String("op", op),
 				zap.String("event_id", event.EventID.String()),

@@ -1,27 +1,34 @@
 package core_http_middleware
 
 import (
-	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"time"
-	"uuid"
+
+	"go.uber.org/zap"
 
 	core_logger "notifier/internal/core/logger"
 	core_http_response "notifier/internal/core/transport/http/response"
-
-	"go.uber.org/zap"
 )
 
+// MARK: - RequestID
 const (
 	requestIDHeader = "X-Request-ID"
 )
+
+func newRequestID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
 
 func RequestID() Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requestID := r.Header.Get(requestIDHeader)
 			if requestID == "" {
-				requestID = uuid.New().String()
+				requestID = newRequestID()
 			}
 
 			r.Header.Set(requestIDHeader, requestID)
@@ -32,6 +39,7 @@ func RequestID() Middleware {
 	}
 }
 
+// MARK: - Logger
 func Logger(l *core_logger.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,13 +50,14 @@ func Logger(l *core_logger.Logger) Middleware {
 				zap.String("url", r.URL.String()),
 			)
 
-			ctx := context.WithValue(r.Context(), core_logger.LoggerKey, logger)
+			ctx := core_logger.ToContext(r.Context(), logger)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
+// MARK: - Panic
 func Panic() Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +76,7 @@ func Panic() Middleware {
 	}
 }
 
+// MARK: - Trace
 func Trace() Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

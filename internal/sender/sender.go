@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"notifier/internal/core/domain"
 	core_logger "notifier/internal/core/logger"
-
-	"go.uber.org/zap"
 )
 
 type Sender interface {
@@ -39,11 +39,6 @@ func (m *MockSender) Send(
 	return nil
 }
 
-type LoggingSender struct {
-	Sender
-	Logger *core_logger.Logger
-}
-
 type ConsoleSender struct {
 	w io.Writer
 }
@@ -52,25 +47,39 @@ type EmailSender struct {
 }
 type TelegramSender struct{}
 
-func (ls LoggingSender) Send(
+type SenderService struct {
+	Sender
+}
+
+func NewSenderService(
+	sender Sender,
+) *SenderService {
+	return &SenderService{
+		Sender: sender,
+	}
+}
+
+func (s SenderService) Send(
 	ctx context.Context,
 	n domain.Notification,
 ) error {
-	ls.Logger.Info(
+	logger := core_logger.FromContext(ctx)
+
+	logger.Info(
 		"sending",
 		zap.String("to", n.Recipient),
 		zap.String("channel", n.Channel),
 	)
 
-	if err := ls.Sender.Send(ctx, n); err != nil {
-		ls.Logger.Error(
+	if err := s.Sender.Send(ctx, n); err != nil {
+		logger.Error(
 			"Failed to send notification",
 			zap.Error(err),
 		)
 		return err
 	}
 
-	ls.Logger.Info(
+	logger.Info(
 		"sent",
 		zap.String("to", n.Recipient),
 		zap.String("channel", n.Channel),

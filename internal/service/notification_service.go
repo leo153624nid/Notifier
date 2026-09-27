@@ -8,8 +8,12 @@ import (
 	"time"
 	"uuid"
 
+	"go.uber.org/zap"
+
 	"notifier/internal/audit"
 	"notifier/internal/core/domain"
+	core_errors "notifier/internal/core/errors"
+	core_logger "notifier/internal/core/logger"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 )
@@ -22,7 +26,6 @@ type NotificationService struct {
 	repo    repository.NotificationRepo
 	senders map[string]sender.Sender
 	audit   *audit.Logger
-	logger  *slog.Logger
 	wg      sync.WaitGroup
 }
 
@@ -30,7 +33,6 @@ func NewNotificationService(
 	repo repository.NotificationRepo,
 	senders map[string]sender.Sender,
 	auditLogger *audit.Logger,
-	logger *slog.Logger,
 ) (*NotificationService, error) {
 	const op = "NewNotificationService"
 
@@ -43,15 +45,11 @@ func NewNotificationService(
 	if auditLogger == nil {
 		return nil, fmt.Errorf("%s: auditLogger is required", op)
 	}
-	if logger == nil {
-		return nil, fmt.Errorf("%s: logger is required", op)
-	}
 
 	return &NotificationService{
 		repo:    repo,
 		senders: senders,
 		audit:   auditLogger,
-		logger:  logger,
 	}, nil
 }
 
@@ -60,17 +58,18 @@ func NewNotificationService(
 func (s *NotificationService) Create(
 	ctx context.Context,
 	n domain.Notification,
-	requestID string,
 ) (domain.Notification, error) {
 	const op = "NotificationService.Create"
 
+	logger := core_logger.FromContext(ctx)
+
 	if err := n.Validate(); err != nil {
-		return domain.Notification{}, fmt.Errorf("%s: %w: %v", op, domain.ErrInvalidNotification, err)
+		return domain.Notification{}, fmt.Errorf("%s: %w: %v", op, core_errors.ErrInvalidNotification, err)
 	}
 
 	snd, ok := s.senders[n.Channel]
 	if !ok {
-		return domain.Notification{}, fmt.Errorf("%s: %w", op, domain.ErrUnsupportedChannel)
+		return domain.Notification{}, fmt.Errorf("%s: %w", op, core_errors.ErrUnsupportedChannel)
 	}
 
 	id, err := s.repo.Save(ctx, n)
@@ -82,7 +81,7 @@ func (s *NotificationService) Create(
 	n.Status = "pending"
 
 	s.wg.Add(1)
-	go s.sendAndUpdateStatus(snd, n, requestID)
+	go s.sendAndUpdateStatus(snd, n, logger)
 
 	return n, nil
 }
@@ -90,28 +89,39 @@ func (s *NotificationService) Create(
 func (s *NotificationService) sendAndUpdateStatus(
 	snd sender.Sender,
 	n domain.Notification,
-	requestID string,
+	logger *core_logger.Logger,
 ) {
 	defer s.wg.Done()
-
-	reqLogger := s.logger.With("request_id", requestID)
 
 	sendCtx, sendCancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer sendCancel()
 
+	sendCtx = core_logger.ToContext(sendCtx, logger)
+
 	status := "sent"
 	if err := snd.Send(sendCtx, n); err != nil {
-		reqLogger.Error("send failed", "id", n.ID, "error", err)
+		logger.Error(
+			"notification send failed",
+			zap.Error(err),
+		)
 		status = "failed"
 	} else {
-		reqLogger.Info("notification sent", "id", n.ID, "channel", n.Channel)
+		logger.Info(
+			"notification sent",
+			zap.Int("id", n.ID),
+			zap.String("channel", n.Channel),
+		)
 	}
 
 	updateCtx, updateCancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer updateCancel()
 
 	if err := s.repo.UpdateStatus(updateCtx, n.ID, status); err != nil {
-		reqLogger.Error("update status failed", "id", n.ID, "error", err)
+		logger.Error(
+			"update status failed",
+			zap.Int("id", n.ID),
+			zap.Error(err),
+		)
 	}
 }
 
@@ -120,34 +130,39 @@ func (s *NotificationService) CreateIdempotent(
 	consumer string,
 	eventID uuid.UUID,
 	n domain.Notification,
-	requestID string,
 ) (domain.Notification, error) {
 	const op = "NotificationService.CreateIdempotent"
 
+	logger := core_logger.FromContext(ctx)
+
 	if err := n.Validate(); err != nil {
-		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, domain.ErrInvalidNotification, err)
+		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, core_errors.ErrInvalidNotification, err)
 	}
 
 	snd, ok := s.senders[n.Channel]
 	if !ok {
-		return domain.Notification{}, fmt.Errorf("%s: %w", op, domain.ErrUnsupportedChannel)
+		return domain.Notification{}, fmt.Errorf("%s: %w", op, core_errors.ErrUnsupportedChannel)
 	}
 
 	id, err := s.repo.SaveIdempotent(ctx, consumer, eventID, n)
 	if err != nil {
-		if errors.Is(err, domain.ErrEventAlreadyProcessed) {
-			return domain.Notification{}, fmt.Errorf("%s: %w", op, domain.ErrEventAlreadyProcessed)
+		if errors.Is(err, core_errors.ErrEventAlreadyProcessed) {
+			return domain.Notification{}, fmt.Errorf("%s: %w", op, core_errors.ErrEventAlreadyProcessed)
 		}
 
-		s.logger.Error("save failed", "op", op, "error", err)
-		return domain.Notification{}, fmt.Errorf("%s: save: %w", op, err)
+		logger.Error(
+			"save idempotent failed",
+			zap.String("op", op),
+			zap.Error(err),
+		)
+		return domain.Notification{}, fmt.Errorf("%s: save idempotent: %w", op, err)
 	}
 
 	n.ID = id
 	n.Status = "pending"
 
 	s.wg.Add(1)
-	go s.sendAndUpdateStatus(snd, n, requestID)
+	go s.sendAndUpdateStatus(snd, n, logger)
 
 	return n, nil
 }

@@ -5,17 +5,21 @@ import (
 	"errors"
 	"net/http"
 
-	"notifier/internal/core/domain"
-
 	"go.uber.org/zap"
+
+	"notifier/internal/core/domain"
+	core_errors "notifier/internal/core/errors"
+	core_logger "notifier/internal/core/logger"
+	core_http_request "notifier/internal/core/transport/http/request"
+	core_http_response "notifier/internal/core/transport/http/response"
 )
 
 type CreateNotificationRequest struct {
-	To      string `json:"to"`
-	Subject string `json:"subject"`
-	Body    string `json:"body"`
-	Channel string `json:"channel"`
-	Urgent  bool   `json:"urgent"`
+	To      string `json:"to" validate:"required"`
+	Subject string `json:"subject" validate:"required"`
+	Body    string `json:"body" validate:"required"`
+	Channel string `json:"channel" validate:"required"`
+	Urgent  bool   `json:"urgent" validate:"required"`
 }
 
 type CreateNotificationResponse NotificationResponse
@@ -45,40 +49,42 @@ func toCreateNotificationResponse(n domain.Notification) CreateNotificationRespo
 func (h *NotificationsHTTPHandler) createNotification(w http.ResponseWriter, r *http.Request) {
 	const op = "NotificationsHTTPHandler.createNotification"
 
+	ctx := r.Context()
+	logger := core_logger.FromContext(ctx)
+	responseHandler := core_http_response.NewHTTPResponseHandler(logger, w)
+
 	var req CreateNotificationRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		SendJSONError(w, "invalid request payload", http.StatusBadRequest)
+	if err := core_http_request.DecodeAndValidateRequest(r, &req); err != nil {
+		responseHandler.ErrorResponse("decode and validate request failed", err)
 		return
 	}
 
-	requestID := getRequestID(r.Context())
-
-	n, err := h.notifications.Create(r.Context(), req.toDomain(), requestID)
-	if err != nil {
+	n, createErr := h.notifications.Create(ctx, req.toDomain())
+	if createErr != nil {
 		switch {
-		case errors.Is(err, domain.ErrInvalidNotification):
-			SendJSONError(w, "invalid request", http.StatusBadRequest)
-		case errors.Is(err, domain.ErrUnsupportedChannel):
-			SendJSONError(w, "invalid request: unsupported channel", http.StatusBadRequest)
+		case errors.Is(createErr, core_errors.ErrInvalidNotification):
+			responseHandler.ErrorResponse("invalid request", core_errors.ErrInvalidNotification)
+		case errors.Is(createErr, core_errors.ErrUnsupportedChannel):
+			responseHandler.ErrorResponse("invalid request: unsupported channel", core_errors.ErrUnsupportedChannel)
 		default:
-			h.logger.Error(
+			logger.Error(
 				"create notification failed",
 				zap.String("op", op),
-				zap.Error(err),
+				zap.Error(createErr),
 			)
-			SendJSONError(w, "internal error", http.StatusInternalServerError)
+			responseHandler.ErrorResponse("internal error", createErr)
 		}
 		return
 	}
 
-	js, err := json.Marshal(toCreateNotificationResponse(n))
-	if err != nil {
-		h.logger.Error(
+	js, marshalErr := json.Marshal(toCreateNotificationResponse(n))
+	if marshalErr != nil {
+		logger.Error(
 			"marshal failed",
 			zap.String("op", op),
-			zap.Error(err),
+			zap.Error(marshalErr),
 		)
-		SendJSONError(w, "internal error", http.StatusInternalServerError)
+		responseHandler.ErrorResponse("internal error", marshalErr)
 		return
 	}
 

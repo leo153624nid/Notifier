@@ -9,6 +9,7 @@ import (
 	"uuid"
 
 	"notifier/internal/core/domain"
+	core_errors "notifier/internal/core/errors"
 )
 
 type MemoryRepository struct {
@@ -52,7 +53,7 @@ func (r *MemoryRepository) SaveIdempotent(
 
 	eventKey := consumer + ":" + eventID.String()
 	if _, ok := r.events[eventKey]; ok {
-		return 0, fmt.Errorf("%s: %w", op, domain.ErrEventAlreadyProcessed)
+		return 0, fmt.Errorf("%s: %w", op, core_errors.ErrEventAlreadyProcessed)
 	}
 	r.events[eventKey] = struct{}{}
 
@@ -118,7 +119,7 @@ func (r *MemoryRepository) GetById(_ context.Context, id int) (domain.Notificati
 
 	n, ok := r.notifications[id]
 	if !ok {
-		err := fmt.Errorf("%s: %w", op, domain.ErrNotFound)
+		err := fmt.Errorf("%s: %w", op, core_errors.ErrNotFound)
 		return domain.Notification{}, err
 	}
 
@@ -133,7 +134,7 @@ func (r *MemoryRepository) DeleteById(_ context.Context, id int) error {
 
 	_, ok := r.notifications[id]
 	if !ok {
-		return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
+		return fmt.Errorf("%s: %w", op, core_errors.ErrNotFound)
 	}
 
 	delete(r.notifications, id)
@@ -149,7 +150,7 @@ func (r *MemoryRepository) UpdateStatus(_ context.Context, id int, status string
 
 	n, ok := r.notifications[id]
 	if !ok {
-		return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
+		return fmt.Errorf("%s: %w", op, core_errors.ErrNotFound)
 	}
 
 	n.Status = status

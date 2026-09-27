@@ -8,6 +8,7 @@ import (
 
 	"notifier/internal/audit"
 	"notifier/internal/core/domain"
+	core_errors "notifier/internal/core/errors"
 	"notifier/internal/repository"
 	"notifier/internal/sender"
 )
@@ -117,19 +118,19 @@ func TestNotificationService_Create(t *testing.T) {
 		{
 			name:      "empty recipient",
 			n:         domain.Notification{Recipient: "", Subject: "some", Channel: "email"},
-			wantErr:   domain.ErrInvalidNotification,
+			wantErr:   core_errors.ErrInvalidNotification,
 			wantCalls: 0,
 		},
 		{
 			name:      "empty channel",
 			n:         domain.Notification{Recipient: "user@example.com", Subject: "some", Channel: ""},
-			wantErr:   domain.ErrInvalidNotification,
+			wantErr:   core_errors.ErrInvalidNotification,
 			wantCalls: 0,
 		},
 		{
 			name:      "unknown channel",
 			n:         domain.Notification{Recipient: "user@example.com", Subject: "some", Channel: "sms"},
-			wantErr:   domain.ErrUnsupportedChannel,
+			wantErr:   core_errors.ErrUnsupportedChannel,
 			wantCalls: 0,
 		},
 	}
@@ -139,7 +140,7 @@ func TestNotificationService_Create(t *testing.T) {
 			mock := &sender.MockSender{}
 			s := newTestService(t, map[string]sender.Sender{"email": mock})
 
-			_, err := s.Create(context.Background(), tt.n, "req-1")
+			_, err := s.Create(context.Background(), tt.n)
 			s.Wait()
 
 			if tt.wantErr == nil && err != nil {
@@ -162,7 +163,7 @@ func TestNotificationService_Create_UpdatesStatusAfterSend(t *testing.T) {
 	n, err := s.Create(context.Background(), domain.Notification{
 		Recipient: "user@example.com",
 		Channel:   "email",
-	}, "req-1")
+	})
 	if err != nil {
 		t.Fatalf("Create() error: %s", err)
 	}
@@ -188,7 +189,7 @@ func TestNotificationService_Get(t *testing.T) {
 	created, err := s.Create(context.Background(), domain.Notification{
 		Recipient: "needed recipient",
 		Channel:   "email",
-	}, "req-1")
+	})
 	if err != nil {
 		t.Fatalf("Create() error: %s", err)
 	}
@@ -203,7 +204,7 @@ func TestNotificationService_Get(t *testing.T) {
 	}
 
 	_, err = s.Get(context.Background(), 9999)
-	if !errors.Is(err, domain.ErrNotFound) {
+	if !errors.Is(err, core_errors.ErrNotFound) {
 		t.Errorf("error = %v, want ErrNotFound", err)
 	}
 }
@@ -215,14 +216,14 @@ func TestNotificationService_Delete(t *testing.T) {
 	created, err := s.Create(context.Background(), domain.Notification{
 		Recipient: "test@mail.com",
 		Channel:   "email",
-	}, "req-1")
+	})
 	if err != nil {
 		t.Fatalf("Create() error: %s", err)
 	}
 	s.Wait()
 
 	err = s.Delete(context.Background(), 9999)
-	if !errors.Is(err, domain.ErrNotFound) {
+	if !errors.Is(err, core_errors.ErrNotFound) {
 		t.Errorf("error = %v, want ErrNotFound", err)
 	}
 
@@ -240,7 +241,7 @@ func TestNotificationService_List(t *testing.T) {
 		_, err := s.Create(context.Background(), domain.Notification{
 			Recipient: fmt.Sprintf("recipient #%d", i),
 			Channel:   "email",
-		}, "req-1")
+		})
 		if err != nil {
 			t.Fatalf("Create() error: %s", err)
 		}
@@ -264,7 +265,7 @@ func TestNotificationService_Export(t *testing.T) {
 		_, err := s.Create(context.Background(), domain.Notification{
 			Recipient: fmt.Sprintf("recipient #%d", i),
 			Channel:   "email",
-		}, "req-1")
+		})
 		if err != nil {
 			t.Fatalf("Create() error: %s", err)
 		}

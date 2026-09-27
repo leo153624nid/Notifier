@@ -16,6 +16,7 @@ import (
 	"notifier/internal/cache"
 	core_config "notifier/internal/core/config"
 	core_logger "notifier/internal/core/logger"
+	core_http_middleware "notifier/internal/core/transport/http/middleware"
 	core_http_server "notifier/internal/core/transport/http/server"
 	cached_repo "notifier/internal/repository/cache"
 	"notifier/internal/repository/postgres"
@@ -117,9 +118,9 @@ func main() {
 	)
 
 	senders := map[string]sender.Sender{
-		"console":  sender.LoggingSender{Sender: sender.NewConsoleSender(os.Stdout), Logger: logger},
-		"email":    sender.LoggingSender{Sender: sender.NewEmailSender(os.Stdout), Logger: logger},
-		"telegram": sender.LoggingSender{Sender: sender.TelegramSender{}, Logger: logger},
+		"console":  sender.NewSenderService(sender.NewConsoleSender(os.Stdout)),
+		"email":    sender.NewSenderService(sender.NewEmailSender(os.Stdout)),
+		"telegram": sender.NewSenderService(sender.TelegramSender{}),
 	}
 
 	auditLogger := audit.NewLogger(cfg.AuditLogPath)
@@ -146,7 +147,6 @@ func main() {
 	notificationsTransportHTTP := transport_http.NewNotificationsHTTPHandler(
 		notificationService,
 		healthService,
-		logger,
 		appName,
 		appVersion,
 	)
@@ -157,6 +157,10 @@ func main() {
 	httpServer := core_http_server.NewHTTPServer(
 		core_http_server.NewConfigMust(),
 		logger,
+		core_http_middleware.RequestID(),
+		core_http_middleware.Logger(logger),
+		core_http_middleware.Panic(),
+		core_http_middleware.Trace(),
 	)
 	httpServer.RegisterApiRoutes(notificationsApiVersionRouter)
 
@@ -178,7 +182,6 @@ func main() {
 		kafkaCfg.LoginGroupID,
 		kafkaCfg.DLQTopic,
 		notificationService,
-		logger,
 	)
 
 	// MARK: - Start HTTP server
@@ -210,7 +213,7 @@ func main() {
 	logger.Warn("start consumers ...")
 
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	go loginConsumer.Run(consumerCtx)
+	go loginConsumer.Run(consumerCtx, logger)
 
 	// MARK: Wait interrupt signal
 	<-runCtx.Done() // freeze here and waiting signal

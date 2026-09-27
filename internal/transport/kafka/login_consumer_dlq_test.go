@@ -6,12 +6,12 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
 	authevents "contracts/events/auth/v1"
+	core_logger "notifier/internal/core/logger"
 
 	"github.com/segmentio/kafka-go"
-
-	"uuid"
 )
 
 // mockWriter — тестовая замена *kafka.Writer: пишет в DLQ в память вместо
@@ -154,10 +154,14 @@ func TestLoginConsumer_SendToDLQ(t *testing.T) {
 func runUntilQueueDrained(t *testing.T, c *LoginConsumer, r *mockReader) {
 	t.Helper()
 
+	logger, _ := core_logger.NewLogger(
+		core_logger.NewConfigMust(),
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		c.Run(ctx)
+		c.Run(ctx, logger)
 		close(done)
 	}()
 

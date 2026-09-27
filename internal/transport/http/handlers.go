@@ -8,19 +8,23 @@ import (
 	"strconv"
 	"time"
 
-	"notifier/internal/core/domain"
+	core_errors "notifier/internal/core/errors"
+	core_logger "notifier/internal/core/logger"
 
 	"go.uber.org/zap"
 )
 
 func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.Request) {
-	const op = "Handler.health"
+	const op = "NotificationsHTTPHandler.health"
 
-	ctxDB, cancelDB := context.WithTimeout(r.Context(), 1*time.Second)
+	ctx := r.Context()
+	logger := core_logger.FromContext(ctx)
+
+	ctxDB, cancelDB := context.WithTimeout(ctx, 1*time.Second)
 	defer cancelDB()
 
 	if err := h.health.CheckDB(ctxDB); err != nil {
-		h.logger.Error(
+		logger.Error(
 			"db health check failed",
 			zap.String("op", op),
 			zap.Error(err),
@@ -30,11 +34,11 @@ func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ctxCache, cancelCache := context.WithTimeout(r.Context(), 1*time.Second)
+	ctxCache, cancelCache := context.WithTimeout(ctx, 1*time.Second)
 	defer cancelCache()
 
 	if err := h.health.CheckCache(ctxCache); err != nil {
-		h.logger.Error(
+		logger.Error(
 			"cache health check failed",
 			zap.String("op", op),
 			zap.Error(err),
@@ -52,7 +56,7 @@ func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.
 
 	js, err := json.Marshal(resp)
 	if err != nil {
-		h.logger.Error(
+		logger.Error(
 			"marshal failed",
 			zap.String("op", op),
 			zap.Error(err),
@@ -66,23 +70,26 @@ func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.
 }
 
 func (h *NotificationsHTTPHandler) getNotification(w http.ResponseWriter, r *http.Request) {
-	const op = "Handler.getNotification"
+	const op = "NotificationsHTTPHandler.getNotification"
+
+	ctx := r.Context()
+	logger := core_logger.FromContext(ctx)
 
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		SendJSONError(w, domain.ErrInvalidID.Error(), http.StatusBadRequest)
+		SendJSONError(w, core_errors.ErrInvalidArgument.Error(), http.StatusBadRequest)
 		return
 	}
 
-	n, err := h.notifications.Get(r.Context(), id)
+	n, err := h.notifications.Get(ctx, id)
 	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			SendJSONError(w, domain.ErrNotFound.Error(), http.StatusNotFound)
+		if errors.Is(err, core_errors.ErrNotFound) {
+			SendJSONError(w, core_errors.ErrNotFound.Error(), http.StatusNotFound)
 			return
 		}
 
-		h.logger.Error(
+		logger.Error(
 			"get notification failed",
 			zap.String("op", op),
 			zap.Error(err),
@@ -93,7 +100,7 @@ func (h *NotificationsHTTPHandler) getNotification(w http.ResponseWriter, r *htt
 
 	js, err := json.Marshal(toNotificationResponse(n))
 	if err != nil {
-		h.logger.Error(
+		logger.Error(
 			"marshal failed",
 			zap.String("op", op),
 			zap.Error(err),
@@ -107,23 +114,26 @@ func (h *NotificationsHTTPHandler) getNotification(w http.ResponseWriter, r *htt
 }
 
 func (h *NotificationsHTTPHandler) deleteNotification(w http.ResponseWriter, r *http.Request) {
-	const op = "Handler.deleteNotification"
+	const op = "NotificationsHTTPHandler.deleteNotification"
+
+	ctx := r.Context()
+	logger := core_logger.FromContext(ctx)
 
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		SendJSONError(w, domain.ErrInvalidID.Error(), http.StatusBadRequest)
+		SendJSONError(w, core_errors.ErrInvalidArgument.Error(), http.StatusBadRequest)
 		return
 	}
 
-	delErr := h.notifications.Delete(r.Context(), id)
+	delErr := h.notifications.Delete(ctx, id)
 	if delErr != nil {
-		if errors.Is(delErr, domain.ErrNotFound) {
-			SendJSONError(w, domain.ErrNotFound.Error(), http.StatusNotFound)
+		if errors.Is(delErr, core_errors.ErrNotFound) {
+			SendJSONError(w, core_errors.ErrNotFound.Error(), http.StatusNotFound)
 			return
 		}
 
-		h.logger.Error(
+		logger.Error(
 			"delete notification failed",
 			zap.String("op", op),
 			zap.Error(delErr),
@@ -136,15 +146,18 @@ func (h *NotificationsHTTPHandler) deleteNotification(w http.ResponseWriter, r *
 }
 
 func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *http.Request) {
-	const op = "Handler.listNotifications"
+	const op = "NotificationsHTTPHandler.listNotifications"
+
+	ctx := r.Context()
+	logger := core_logger.FromContext(ctx)
 
 	query := r.URL.Query()
 	page, _ := strconv.Atoi(query.Get("page"))
 	size, _ := strconv.Atoi(query.Get("size"))
 
-	notifications, err := h.notifications.List(r.Context(), page, size)
+	notifications, err := h.notifications.List(ctx, page, size)
 	if err != nil {
-		h.logger.Error(
+		logger.Error(
 			"list notifications failed",
 			zap.String("op", op),
 			zap.Error(err),
@@ -155,7 +168,7 @@ func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *h
 
 	js, err := json.Marshal(toNotificationResponses(notifications))
 	if err != nil {
-		h.logger.Error(
+		logger.Error(
 			"marshal failed",
 			zap.String("op", op),
 			zap.Error(err),
@@ -168,12 +181,15 @@ func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *h
 	_, _ = w.Write(js)
 }
 
-func (h *NotificationsHTTPHandler) exportNotification(w http.ResponseWriter, r *http.Request) {
-	const op = "Handler.exportNotification"
+func (h *NotificationsHTTPHandler) exportNotifications(w http.ResponseWriter, r *http.Request) {
+	const op = "NotificationsHTTPHandler.exportNotification"
 
-	count, err := h.notifications.Export(r.Context())
+	ctx := r.Context()
+	logger := core_logger.FromContext(ctx)
+
+	count, err := h.notifications.Export(ctx)
 	if err != nil {
-		h.logger.Error(
+		logger.Error(
 			"export failed",
 			zap.String("op", op),
 			zap.Error(err),

@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"notifier/internal/core/domain"
+	core_errors "notifier/internal/core/errors"
 	core_logger "notifier/internal/core/logger"
 )
 
@@ -82,7 +83,7 @@ func (r *PostgresRepository) SaveIdempotent(
 	}
 
 	if tag.RowsAffected() == 0 {
-		return 0, fmt.Errorf("%s: %w", op, domain.ErrEventAlreadyProcessed)
+		return 0, fmt.Errorf("%s: %w", op, core_errors.ErrEventAlreadyProcessed)
 	}
 
 	var id int
@@ -171,7 +172,7 @@ func (r *PostgresRepository) GetById(ctx context.Context, id int) (domain.Notifi
 	).Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Notification{}, fmt.Errorf("%s: scan: %w", op, domain.ErrNotFound)
+		return domain.Notification{}, fmt.Errorf("%s: scan: %w", op, core_errors.ErrNotFound)
 	}
 	if err != nil {
 		return domain.Notification{}, fmt.Errorf("%s: scan: %w", op, err)
@@ -194,7 +195,7 @@ func (r *PostgresRepository) DeleteById(ctx context.Context, id int) error {
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("%s: delete: %w", op, domain.ErrNotFound)
+		return fmt.Errorf("%s: delete: %w", op, core_errors.ErrNotFound)
 	}
 
 	return nil
@@ -213,7 +214,7 @@ func (r *PostgresRepository) UpdateStatus(ctx context.Context, id int, status st
 	}
 
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
+		return fmt.Errorf("%s: %w", op, core_errors.ErrNotFound)
 	}
 
 	return nil

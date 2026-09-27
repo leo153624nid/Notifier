@@ -2,51 +2,21 @@ package transport_http
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 	"uuid"
 
+	core_http_response "notifier/internal/core/transport/http/response"
+
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"
 )
-
-// MARK: - RequestID
-type ctxKey struct{}
-
-var requestIDKey = ctxKey{}
-
-func newRequestID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
-func getRequestID(ctx context.Context) string {
-	id, ok := ctx.Value(requestIDKey).(string)
-	if !ok {
-		return ""
-	}
-	return id
-}
-
-func requestID(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := newRequestID()
-		w.Header().Set("X-Request-ID", id)
-		ctx := context.WithValue(r.Context(), requestIDKey, id)
-
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
 
 // MARK: - RateLimiter
 // ipRateLimiter выдаёт отдельный token-bucket лимитер на каждый IP,
@@ -143,15 +113,6 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-// MARK: - ContentType
-func contentType(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-
-		next.ServeHTTP(w, r)
-	})
-}
-
 // MARK: - Auth
 type userIDKeyType struct{}
 
@@ -225,7 +186,7 @@ func authMiddleware(jwtSecret string, logger *slog.Logger) func(http.Handler) ht
 			if !ok {
 				logger.Warn("auth failed", "path", r.URL.Path, "method", r.Method, "remote", r.RemoteAddr, "reason", "missing bearer token")
 				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(APIError{Error: "invalid or missing bearer token"})
+				_ = json.NewEncoder(w).Encode(core_http_response.APIError{Error: "invalid or missing bearer token"})
 				return
 			}
 
@@ -233,39 +194,12 @@ func authMiddleware(jwtSecret string, logger *slog.Logger) func(http.Handler) ht
 			if err != nil {
 				logger.Warn("auth failed", "path", r.URL.Path, "method", r.Method, "remote", r.RemoteAddr, "error", err)
 				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(APIError{Error: "invalid or expired token"})
+				_ = json.NewEncoder(w).Encode(core_http_response.APIError{Error: "invalid or expired token"})
 				return
 			}
 
 			ctx := context.WithValue(r.Context(), userIDKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
-// MARK: - Logging and Recover panic
-func loggingRecoverMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-			reqID := getRequestID(r.Context())
-
-			defer func() {
-				if p := recover(); p != nil {
-					logger.Error("panic recovered", "request_id", reqID, "panic", p, "stack", debug.Stack())
-					SendJSONError(w, "internal error", http.StatusInternalServerError)
-				}
-			}()
-
-			next.ServeHTTP(w, r)
-
-			logger.Info(
-				"request completed",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"duration", time.Since(start),
-				"request_id", reqID,
-			)
 		})
 	}
 }

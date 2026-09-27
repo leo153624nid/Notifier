@@ -90,9 +90,10 @@ services:
         condition: service_healthy
     environment:
       PORT: ${PORT:-8080}
+      HTTP_SHUTDOWN_TIMEOUT: ${HTTP_SHUTDOWN_TIMEOUT:-30s}
       GRPC_PORT: ${NOTIFIER_GRPC_PORT:-9090}
       JWT_SECRET: ${JWT_SECRET:-devsecret}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # Путь внутри контейнера — см. volumes ниже, где он смонтирован на
       # ./out/logs на хосте.
       LOG_FOLDER: /var/log/notifier
@@ -183,7 +184,7 @@ services:
     environment:
       PORT: ${AUTH_PORT:-8081}
       NOTIFIER_GRPC_ADDR: notifier:${NOTIFIER_GRPC_PORT:-9090}
-      LOG_LEVEL: ${AUTH_LOG_LEVEL:-info}
+      LOG_LEVEL: ${AUTH_LOG_LEVEL:-INFO}
       JWT_SECRET: ${JWT_SECRET:-devsecret}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-720h}

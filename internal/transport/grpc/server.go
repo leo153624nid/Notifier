@@ -4,30 +4,28 @@ import (
 	"context"
 	"errors"
 
-	notificationv1 "contracts/gen/notifications/v1"
-	"notifier/internal/core/domain"
-	core_logger "notifier/internal/core/logger"
-	"notifier/internal/service"
-
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	notificationv1 "contracts/gen/notifications/v1"
+	"notifier/internal/core/domain"
+	core_errors "notifier/internal/core/errors"
+	core_logger "notifier/internal/core/logger"
+	"notifier/internal/service"
 )
 
 type Router struct {
 	notificationv1.UnimplementedNotificationServiceServer
 	notifications *service.NotificationService
-	logger        *core_logger.Logger
 }
 
 func NewRouter(
 	notifications *service.NotificationService,
-	logger *core_logger.Logger,
 ) *Router {
 	return &Router{
 		notifications: notifications,
-		logger:        logger,
 	}
 }
 
@@ -43,7 +41,7 @@ func NewGRPCServer(
 	)
 	notificationv1.RegisterNotificationServiceServer(
 		srv,
-		NewRouter(notifications, logger),
+		NewRouter(notifications),
 	)
 
 	return srv
@@ -55,6 +53,8 @@ func (r *Router) CreateNotification(
 ) (*notificationv1.CreateNotificationResponse, error) {
 	const op = "Server.CreateNotification"
 
+	logger := core_logger.FromContext(ctx)
+
 	n := domain.Notification{
 		Recipient: req.GetRecipient(),
 		Subject:   req.GetSubject(),
@@ -63,17 +63,25 @@ func (r *Router) CreateNotification(
 		IsUrgent:  req.GetUrgent(),
 	}
 
-	requestID := requestIDFromContext(ctx)
-
-	created, err := r.notifications.Create(ctx, n, requestID)
+	created, err := r.notifications.Create(ctx, n)
 	if err != nil {
 		switch {
-		case errors.Is(err, domain.ErrInvalidNotification):
+		case errors.Is(err, core_errors.ErrInvalidNotification):
+			logger.Warn(
+				"invalid request",
+				zap.String("op", op),
+				zap.Error(core_errors.ErrInvalidNotification),
+			)
 			return nil, status.Error(codes.InvalidArgument, "invalid request")
-		case errors.Is(err, domain.ErrUnsupportedChannel):
+		case errors.Is(err, core_errors.ErrUnsupportedChannel):
+			logger.Warn(
+				"unsupported channel",
+				zap.String("op", op),
+				zap.Error(core_errors.ErrUnsupportedChannel),
+			)
 			return nil, status.Error(codes.InvalidArgument, "unsupported channel")
 		default:
-			r.logger.Error(
+			logger.Error(
 				"create notification failed",
 				zap.String("op", op),
 				zap.Error(err),

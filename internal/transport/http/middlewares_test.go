@@ -10,6 +10,8 @@ import (
 	"time"
 	"uuid"
 
+	core_http_response "notifier/internal/core/transport/http/response"
+
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"
 )
@@ -53,7 +55,7 @@ func TestRateLimiterMiddleware_RejectsOverBurst(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusTooManyRequests)
 	}
 
-	var apiErr APIError
+	var apiErr core_http_response.APIError
 	if err := json.NewDecoder(w.Body).Decode(&apiErr); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
@@ -231,7 +233,7 @@ func TestAuthMiddleware_Rejects(t *testing.T) {
 				t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 			}
 
-			var apiErr APIError
+			var apiErr core_http_response.APIError
 			if err := json.NewDecoder(w.Body).Decode(&apiErr); err != nil {
 				t.Fatalf("decode body: %v", err)
 			}

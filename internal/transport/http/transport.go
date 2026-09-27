@@ -6,7 +6,6 @@ import (
 	"uuid"
 
 	"notifier/internal/core/domain"
-	core_logger "notifier/internal/core/logger"
 	core_http_server "notifier/internal/core/transport/http/server"
 )
 
@@ -14,7 +13,6 @@ import (
 type NotificationsHTTPHandler struct {
 	notifications NotificationService
 	health        HealthService
-	logger        *core_logger.Logger // TODO: delete ?
 	appName       string
 	appVersion    string
 }
@@ -23,7 +21,6 @@ type NotificationService interface {
 	Create(
 		ctx context.Context,
 		n domain.Notification,
-		requestID string,
 	) (domain.Notification, error)
 
 	CreateIdempotent(
@@ -31,7 +28,6 @@ type NotificationService interface {
 		consumer string,
 		eventID uuid.UUID,
 		n domain.Notification,
-		requestID string,
 	) (domain.Notification, error)
 
 	Get(
@@ -66,14 +62,12 @@ type HealthService interface {
 func NewNotificationsHTTPHandler(
 	notifications NotificationService,
 	health HealthService,
-	logger *core_logger.Logger,
 	appName string,
 	appVersion string,
 ) *NotificationsHTTPHandler {
 	return &NotificationsHTTPHandler{
 		notifications: notifications,
 		health:        health,
-		logger:        logger,
 		appName:       appName,
 		appVersion:    appVersion,
 	}
@@ -86,6 +80,30 @@ func (h *NotificationsHTTPHandler) Routes() []core_http_server.Route {
 			Path:    "/health",
 			Handler: h.healthHandler,
 		},
-		// TODO
+		{
+			Method:  http.MethodGet,
+			Path:    "/notifications",
+			Handler: h.listNotifications,
+		},
+		{
+			Method:  http.MethodGet,
+			Path:    "/notifications/export",
+			Handler: h.exportNotifications,
+		},
+		{
+			Method:  http.MethodGet,
+			Path:    "/notifications/{id}",
+			Handler: h.getNotification,
+		},
+		{
+			Method:  http.MethodDelete,
+			Path:    "/notifications/{id}",
+			Handler: h.deleteNotification,
+		},
+		{
+			Method:  http.MethodPost,
+			Path:    "/notifications",
+			Handler: h.createNotification,
+		},
 	}
 }
