@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"go.uber.org/zap"
+
 	core_errors "notifier/internal/core/errors"
+	core_logger "notifier/internal/core/logger"
 )
 
 func (r *Repository) UpdateStatus(
@@ -13,6 +16,13 @@ func (r *Repository) UpdateStatus(
 	status string,
 ) error {
 	const op = "PostgresRepository.UpdateStatus"
+
+	logger := core_logger.FromContext(ctx)
+	logger.Debug(
+		"want update status",
+		zap.String("status", status),
+		zap.Int("id", id),
+	)
 
 	tag, err := r.pool.Exec(
 		ctx,

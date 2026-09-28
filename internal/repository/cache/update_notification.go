@@ -2,9 +2,10 @@ package cached_repo
 
 import (
 	"context"
-	core_logger "notifier/internal/core/logger"
 
 	"go.uber.org/zap"
+
+	core_logger "notifier/internal/core/logger"
 )
 
 func (r *CachedNotificationRepo) UpdateStatus(

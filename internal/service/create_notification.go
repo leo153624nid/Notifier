@@ -93,6 +93,8 @@ func (s *NotificationService) sendAndUpdateStatus(
 	updateCtx, updateCancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer updateCancel()
 
+	updateCtx = core_logger.ToContext(updateCtx, logger)
+
 	if err := s.repo.UpdateStatus(updateCtx, n.ID, status); err != nil {
 		logger.Error(
 			"update status failed",

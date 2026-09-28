@@ -23,6 +23,7 @@ func (r *CachedNotificationRepo) GetById(
 	if err == nil {
 		var n domain.Notification
 		if jsonErr := json.Unmarshal(cached, &n); jsonErr == nil {
+			logger.Debug("cache used")
 			return n, nil
 		}
 	}

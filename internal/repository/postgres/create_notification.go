@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"notifier/internal/core/domain"
@@ -27,7 +29,7 @@ func (r *Repository) CreateIdempotent(
 		return domain.Notification{}, fmt.Errorf("%s: begin: %w", op, err)
 	}
 	defer func() {
-		if rollErr := tx.Rollback(ctx); rollErr != nil {
+		if rollErr := tx.Rollback(ctx); rollErr != nil && !errors.Is(rollErr, pgx.ErrTxClosed) {
 			logger.Error(
 				"rollback failed",
 				zap.String("op", op),
