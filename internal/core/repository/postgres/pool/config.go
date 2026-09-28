@@ -44,6 +44,8 @@ func (c Config) dsn(scheme string) string {
 }
 
 func LoadConfig() Config {
+	dur, _ := time.ParseDuration(core_config.GetEnv("PG_TIMEOUT", "10s"))
+
 	return Config{
 		Host:     core_config.GetEnv("PG_HOST", "localhost"),
 		Port:     core_config.GetEnv("PG_PORT", "5432"),
@@ -51,6 +53,6 @@ func LoadConfig() Config {
 		Password: core_config.GetEnv("PG_PASSWORD", "notifier"),
 		DBName:   core_config.GetEnv("PG_DBNAME", "notifier"),
 		SSLMode:  core_config.GetEnv("PG_SSLMODE", "disable"),
-		Timeout:  10 * time.Second, // TODO ?
+		Timeout:  dur,
 	}
 }

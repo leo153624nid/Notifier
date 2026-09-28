@@ -87,6 +87,7 @@ func Auth(jwtSecret string) Middleware {
 
 			tokenString, ok := bearerToken(r)
 			if !ok {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="api"`)
 				rh.AuthErrorResponse(
 					"invalid or missing bearer token",
 					r.URL.Path,
@@ -99,6 +100,7 @@ func Auth(jwtSecret string) Middleware {
 
 			userID, err := parseUserID(tokenString, jwtSecret)
 			if err != nil {
+				w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
 				rh.AuthErrorResponse(
 					"invalid or expired token",
 					r.URL.Path,

@@ -13,10 +13,13 @@ func (r *Repository) DeleteById(
 ) error {
 	const op = "PostgresRepository.DeleteById"
 
+	ctx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
+	defer cancel()
+
 	result, err := r.pool.Exec(
 		ctx,
 		`DELETE 
-		FROM notifications WHERE id=$1`,
+		FROM notifications WHERE id=$1;`,
 		id,
 	)
 	if err != nil {

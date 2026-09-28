@@ -17,6 +17,9 @@ func (r *Repository) UpdateStatus(
 ) error {
 	const op = "PostgresRepository.UpdateStatus"
 
+	ctx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
+	defer cancel()
+
 	logger := core_logger.FromContext(ctx)
 	logger.Debug(
 		"want update status",
@@ -26,7 +29,7 @@ func (r *Repository) UpdateStatus(
 
 	tag, err := r.pool.Exec(
 		ctx,
-		`UPDATE notifications SET status=$1 WHERE id=$2`,
+		`UPDATE notifications SET status=$1 WHERE id=$2;`,
 		status, id,
 	)
 	if err != nil {

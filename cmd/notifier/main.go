@@ -59,21 +59,19 @@ func main() {
 
 	cfg, cfgErr := core_config.Load()
 	if cfgErr != nil {
-		logger.Error("config load failed", zap.Error(cfgErr))
-		os.Exit(1)
+		logger.Fatal("config load failed", zap.Error(cfgErr))
 	}
 
 	// MARK: - Start DB connection
 	logger.Warn("start database connection ...")
 
-	ctxDbInit, cancelDbInit := context.WithTimeout(context.Background(), 10*time.Second)
+	ctxDbInit, cancelDbInit := context.WithTimeout(runCtx, 10*time.Second)
 	defer cancelDbInit()
 
 	postgresCfg := core_postgres_pool.LoadConfig()
 	pool, poolErr := core_postgres_pool.NewConnectionPool(ctxDbInit, postgresCfg)
 	if poolErr != nil {
-		logger.Error("new connection pool", zap.Error(poolErr))
-		os.Exit(1)
+		logger.Fatal("new connection pool", zap.Error(poolErr))
 	}
 	logger.Warn("database connected")
 
@@ -86,7 +84,7 @@ func main() {
 
 	// MARK: Start cache client
 	logger.Warn("start cache client ...")
-	ctxRedisInit, cancelRedisInit := context.WithTimeout(context.Background(), 5*time.Second)
+	ctxRedisInit, cancelRedisInit := context.WithTimeout(runCtx, 5*time.Second)
 	defer cancelRedisInit()
 
 	redisCfg := cache.LoadConfig()
@@ -126,11 +124,10 @@ func main() {
 		auditLogger,
 	)
 	if serviceErr != nil {
-		logger.Error(
+		logger.Fatal(
 			"notifications service init failed",
 			zap.Error(serviceErr),
 		)
-		os.Exit(1)
 	}
 
 	healthService := service.NewHealthService(
@@ -144,8 +141,9 @@ func main() {
 		appName,
 		appVersion,
 	)
-	ipLimiter := core_http_middleware.NewIPRateLimiter(rate.Limit(10), 20)
 	notificationsRoutes := notificationsTransportHTTP.Routes()
+
+	ipLimiter := core_http_middleware.NewIPRateLimiter(rate.Limit(10), 20)
 	notificationsApiVersionRouter := core_http_server.NewApiVersionRouter(
 		core_http_server.ApiVersion1,
 		ipLimiter,
@@ -168,11 +166,10 @@ func main() {
 	grpcCfg := transport_grpc.LoadConfig()
 	grpcLis, grpcErr := net.Listen("tcp", grpcCfg.GRPCPort)
 	if grpcErr != nil {
-		logger.Error(
+		logger.Fatal(
 			"grpc listen failed",
 			zap.Error(grpcErr),
 		)
-		os.Exit(1)
 	}
 
 	kafkaCfg := transport_kafka.LoadConfig()
@@ -212,8 +209,7 @@ func main() {
 	// MARK: - Start consumers
 	logger.Warn("start consumers ...")
 
-	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	go loginConsumer.Run(consumerCtx, logger)
+	go loginConsumer.Run(runCtx, logger)
 
 	// MARK: Wait interrupt signal
 	<-runCtx.Done() // freeze here and waiting signal
@@ -223,7 +219,6 @@ func main() {
 	defer shutDownCancel()
 
 	logger.Warn("shutdown consumers ...")
-	consumerCancel()
 	if err := loginConsumer.Close(shutDownCtx); err != nil {
 		logger.Error(
 			"close() login consumer failed",

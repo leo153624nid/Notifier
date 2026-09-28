@@ -24,6 +24,9 @@ func (r *Repository) CreateIdempotent(
 
 	logger := core_logger.FromContext(ctx)
 
+	ctx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
+	defer cancel()
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return domain.Notification{}, fmt.Errorf("%s: begin: %w", op, err)
@@ -40,9 +43,9 @@ func (r *Repository) CreateIdempotent(
 
 	tag, err := tx.Exec(
 		ctx,
-		`INSERT INTO processed_events 
-		(consumer, event_id) VALUES ($1, $2)
-		ON CONFLICT DO NOTHING`,
+		`INSERT INTO processed_events (consumer, event_id) 
+		VALUES ($1, $2)
+		ON CONFLICT DO NOTHING;`,
 		consumer, eventID,
 	)
 	if err != nil {
@@ -53,15 +56,22 @@ func (r *Repository) CreateIdempotent(
 		return domain.Notification{}, fmt.Errorf("%s: %w", op, core_errors.ErrEventAlreadyProcessed)
 	}
 
-	const status = "pending"
-	var id int
+	var created NotificationModel
 	err = tx.QueryRow(
 		ctx,
 		`INSERT INTO notifications (recipient, subject, body, channel, is_urgent, status)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id`,
-		n.Recipient, n.Subject, n.Body, n.Channel, n.IsUrgent, status,
-	).Scan(&id)
+		RETURNING id, recipient, subject, body, channel, is_urgent, status;`,
+		n.Recipient, n.Subject, n.Body, n.Channel, n.IsUrgent, "pending",
+	).Scan(
+		&created.ID,
+		&created.Recipient,
+		&created.Subject,
+		&created.Body,
+		&created.Channel,
+		&created.IsUrgent,
+		&created.Status,
+	)
 	if err != nil {
 		return domain.Notification{}, fmt.Errorf("%s: scan: %w", op, err)
 	}
@@ -70,13 +80,5 @@ func (r *Repository) CreateIdempotent(
 		return domain.Notification{}, fmt.Errorf("%s: commit: %w", op, err)
 	}
 
-	return domain.NewNotification(
-		id,
-		n.Recipient,
-		n.Subject,
-		n.Body,
-		n.Channel,
-		status,
-		n.IsUrgent,
-	), nil
+	return created.toDomain(), nil
 }

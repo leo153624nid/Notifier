@@ -12,11 +12,14 @@ import (
 func (r *Repository) GetList(ctx context.Context, page int, size int) ([]domain.Notification, error) {
 	const op = "PostgresRepository.GetList"
 
+	ctx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
+	defer cancel()
+
 	rows, err := r.pool.Query(
 		ctx,
 		`SELECT
 		id, recipient, subject, body, channel, is_urgent, status
-		FROM notifications ORDER BY id LIMIT $1 OFFSET $2`,
+		FROM notifications ORDER BY id LIMIT $1 OFFSET $2;`,
 		size,
 		(page-1)*size,
 	)
@@ -25,34 +28,37 @@ func (r *Repository) GetList(ctx context.Context, page int, size int) ([]domain.
 	}
 	defer rows.Close()
 
-	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Notification, error) {
-		var n domain.Notification
-		scanErr := row.Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
-		return n, scanErr
+	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (NotificationModel, error) {
+		var m NotificationModel
+		scanErr := row.Scan(&m.ID, &m.Recipient, &m.Subject, &m.Body, &m.Channel, &m.IsUrgent, &m.Status)
+		return m, scanErr
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%s: collect: %w", op, err)
 	}
 
-	return result, nil
+	return listModelsToDomain(result), nil
 }
 
 func (r *Repository) GetAll(ctx context.Context) ([]domain.Notification, error) {
 	const op = "PostgresRepository.GetAll"
 
+	ctx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
+	defer cancel()
+
 	rows, err := r.pool.Query(
 		ctx,
 		`SELECT 
 		id, recipient, subject, body, channel, is_urgent, status 
-		FROM notifications ORDER BY id`,
+		FROM notifications ORDER BY id;`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: query: %w", op, err)
 	}
 	defer rows.Close()
 
-	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Notification, error) {
-		var n domain.Notification
+	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (NotificationModel, error) {
+		var n NotificationModel
 		scanErr := row.Scan(&n.ID, &n.Recipient, &n.Subject, &n.Body, &n.Channel, &n.IsUrgent, &n.Status)
 		return n, scanErr
 	})
@@ -60,5 +66,5 @@ func (r *Repository) GetAll(ctx context.Context) ([]domain.Notification, error) 
 		return nil, fmt.Errorf("%s: collect: %w", op, err)
 	}
 
-	return result, nil
+	return listModelsToDomain(result), nil
 }
