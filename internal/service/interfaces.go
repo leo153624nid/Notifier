@@ -1,4 +1,4 @@
-package repository
+package service
 
 import (
 	"context"
@@ -8,12 +8,7 @@ import (
 )
 
 type NotificationRepo interface {
-	Save(
-		ctx context.Context,
-		n domain.Notification,
-	) (int, error)
-
-	SaveIdempotent(
+	CreateIdempotent(
 		ctx context.Context,
 		consumer string,
 		eventID uuid.UUID,

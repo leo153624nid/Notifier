@@ -6,6 +6,8 @@ import (
 	core_http_server "notifier/internal/core/transport/http/server"
 )
 
+const httpConsumer = "notifier-HTTP"
+
 // Handler отвечает за перевод HTTP-запросов в вызовы сервисного слоя и обратно.
 type NotificationsHTTPHandler struct {
 	notifications NotificationService

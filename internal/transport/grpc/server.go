@@ -3,6 +3,7 @@ package transport_grpc
 import (
 	"context"
 	"errors"
+	"uuid"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -15,6 +16,8 @@ import (
 	core_logger "notifier/internal/core/logger"
 	"notifier/internal/service"
 )
+
+const grpcConsumer = "notifier-gRPC"
 
 type Router struct {
 	notificationv1.UnimplementedNotificationServiceServer
@@ -63,7 +66,7 @@ func (r *Router) CreateNotification(
 		IsUrgent:  req.GetUrgent(),
 	}
 
-	created, err := r.notifications.Create(ctx, n)
+	created, err := r.notifications.CreateIdempotent(ctx, grpcConsumer, uuid.New(), n)
 	if err != nil {
 		switch {
 		case errors.Is(err, core_errors.ErrInvalidNotification):

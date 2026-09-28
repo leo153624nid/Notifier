@@ -12,18 +12,18 @@ import (
 
 	"notifier/internal/core/domain"
 	core_logger "notifier/internal/core/logger"
-	"notifier/internal/repository"
+	"notifier/internal/service"
 )
 
 type CachedNotificationRepo struct {
-	repo   repository.NotificationRepo
+	repo   service.NotificationRepo
 	redis  *redis.Client
 	logger *core_logger.Logger
 	ttl    time.Duration
 }
 
 func NewCachedNotificationRepo(
-	repo repository.NotificationRepo,
+	repo service.NotificationRepo,
 	redis *redis.Client,
 	logger *core_logger.Logger,
 	ttl time.Duration,
@@ -37,37 +37,15 @@ func NewCachedNotificationRepo(
 }
 
 // MARK: - `NotificationRepo` interface implementation
-func (r *CachedNotificationRepo) Save(
-	ctx context.Context,
-	n domain.Notification,
-) (int, error) {
-	const op = "CachedNotificationRepo.Save"
-
-	id, err := r.repo.Save(ctx, n)
-	if err != nil {
-		return 0, fmt.Errorf("%s: save: %w", op, err)
-	}
-
-	if cacheErr := r.invalidateNotificationCache(ctx, id); cacheErr != nil {
-		r.logger.Warn(
-			"invalidate cache",
-			zap.String("op", op),
-			zap.Error(cacheErr),
-		)
-	}
-
-	return id, nil
-}
-
-func (r *CachedNotificationRepo) SaveIdempotent(
+func (r *CachedNotificationRepo) CreateIdempotent(
 	ctx context.Context,
 	consumer string,
 	eventID uuid.UUID,
 	n domain.Notification,
 ) (int, error) {
-	const op = "CachedNotificationRepo.SaveIdempotent"
+	const op = "CachedNotificationRepo.CreateIdempotent"
 
-	id, err := r.repo.SaveIdempotent(ctx, consumer, eventID, n)
+	id, err := r.repo.CreateIdempotent(ctx, consumer, eventID, n)
 	if err != nil {
 		return 0, fmt.Errorf("%s: save: %w", op, err)
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"uuid"
 
 	"notifier/internal/audit"
 	"notifier/internal/core/domain"
@@ -125,7 +126,7 @@ func TestNotificationService_Create(t *testing.T) {
 			mock := &sender.MockSender{}
 			s := newTestService(t, map[string]sender.Sender{"email": mock})
 
-			_, err := s.Create(context.Background(), tt.n)
+			_, err := s.CreateIdempotent(context.Background(), "test", uuid.New(), tt.n)
 			s.Wait()
 
 			if tt.wantErr == nil && err != nil {
@@ -145,7 +146,7 @@ func TestNotificationService_Create_UpdatesStatusAfterSend(t *testing.T) {
 	mock := &sender.MockSender{}
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
 
-	n, err := s.Create(context.Background(), domain.Notification{
+	n, err := s.CreateIdempotent(context.Background(), "test", uuid.New(), domain.Notification{
 		Recipient: "user@example.com",
 		Channel:   "email",
 	})
@@ -171,7 +172,7 @@ func TestNotificationService_Get(t *testing.T) {
 	mock := &sender.MockSender{}
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
 
-	created, err := s.Create(context.Background(), domain.Notification{
+	created, err := s.CreateIdempotent(context.Background(), "test", uuid.New(), domain.Notification{
 		Recipient: "needed recipient",
 		Channel:   "email",
 	})
@@ -198,7 +199,7 @@ func TestNotificationService_Delete(t *testing.T) {
 	mock := &sender.MockSender{}
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
 
-	created, err := s.Create(context.Background(), domain.Notification{
+	created, err := s.CreateIdempotent(context.Background(), "test", uuid.New(), domain.Notification{
 		Recipient: "test@mail.com",
 		Channel:   "email",
 	})
@@ -223,7 +224,7 @@ func TestNotificationService_List(t *testing.T) {
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
 
 	for i := range 3 {
-		_, err := s.Create(context.Background(), domain.Notification{
+		_, err := s.CreateIdempotent(context.Background(), "test", uuid.New(), domain.Notification{
 			Recipient: fmt.Sprintf("recipient #%d", i),
 			Channel:   "email",
 		})
@@ -247,7 +248,7 @@ func TestNotificationService_Export(t *testing.T) {
 	s := newTestService(t, map[string]sender.Sender{"email": mock})
 
 	for i := range 2 {
-		_, err := s.Create(context.Background(), domain.Notification{
+		_, err := s.CreateIdempotent(context.Background(), "test", uuid.New(), domain.Notification{
 			Recipient: fmt.Sprintf("recipient #%d", i),
 			Channel:   "email",
 		})

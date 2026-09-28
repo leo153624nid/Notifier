@@ -216,7 +216,7 @@ func TestGetNotification(t *testing.T) {
 				fakeCachePinger{},
 			)
 
-			_, err := repo.Save(context.Background(), notificationFixture())
+			_, err := repo.Create(context.Background(), notificationFixture())
 			if err != nil {
 				t.Fatalf("save notification error: %s", err)
 			}
@@ -277,7 +277,7 @@ func TestDeleteNotification(t *testing.T) {
 				fakeCachePinger{},
 			)
 
-			_, err := repo.Save(context.Background(), notificationFixture())
+			_, err := repo.Create(context.Background(), notificationFixture())
 			if err != nil {
 				t.Fatalf("save notification error: %s", err)
 			}
@@ -329,7 +329,7 @@ func TestListNotifications(t *testing.T) {
 			for _, v := range tt.ids {
 				n := notificationFixture()
 				n.Recipient = fmt.Sprintf("recipient #%d", v)
-				_, _ = repo.Save(context.Background(), n)
+				_, _ = repo.Create(context.Background(), n)
 			}
 
 			r := httptest.NewRequest("GET", "/api/v1/notifications", nil)

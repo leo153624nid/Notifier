@@ -24,7 +24,7 @@ func TestMemoryRepository_ConcurrentSave(t *testing.T) {
 				Subject:   "Test",
 				Channel:   "console",
 			}
-			_, err := repo.Save(context.Background(), n)
+			_, err := repo.Create(context.Background(), n)
 			if err != nil {
 				t.Errorf("Save() error: %s", err)
 			}

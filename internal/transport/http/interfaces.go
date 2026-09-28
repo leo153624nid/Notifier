@@ -2,16 +2,12 @@ package transport_http
 
 import (
 	"context"
-	"notifier/internal/core/domain"
 	"uuid"
+
+	"notifier/internal/core/domain"
 )
 
 type NotificationService interface {
-	Create(
-		ctx context.Context,
-		n domain.Notification,
-	) (domain.Notification, error)
-
 	CreateIdempotent(
 		ctx context.Context,
 		consumer string,

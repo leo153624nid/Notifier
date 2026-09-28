@@ -28,7 +28,10 @@ func NewMemoryRepository() *MemoryRepository {
 }
 
 // MARK: - `NotificationRepo` interface implementation
-func (r *MemoryRepository) Save(_ context.Context, n domain.Notification) (int, error) {
+func (r *MemoryRepository) Create(
+	_ context.Context,
+	n domain.Notification,
+) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -40,13 +43,13 @@ func (r *MemoryRepository) Save(_ context.Context, n domain.Notification) (int, 
 	return n.ID, nil
 }
 
-func (r *MemoryRepository) SaveIdempotent(
+func (r *MemoryRepository) CreateIdempotent(
 	ctx context.Context,
 	consumer string,
 	eventID uuid.UUID,
 	n domain.Notification,
 ) (int, error) {
-	const op = "MemoryRepository.SaveIdempotent"
+	const op = "MemoryRepository.CreateIdempotent"
 
 	r.mu.Lock()
 	defer r.mu.Unlock()

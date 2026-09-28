@@ -31,31 +31,14 @@ func NewPostgresRepository(
 }
 
 // MARK: - `NotificationRepo` interface implementation
-func (r *PostgresRepository) Save(ctx context.Context, n domain.Notification) (int, error) {
-	const op = "PostgresRepository.Save"
 
-	var id int
-	err := r.db.QueryRow(
-		ctx,
-		`INSERT INTO notifications (recipient, subject, body, channel, is_urgent, status)
-		VALUES ($1, $2, $3, $4, $5, 'pending')
-		RETURNING id`,
-		n.Recipient, n.Subject, n.Body, n.Channel, n.IsUrgent,
-	).Scan(&id)
-	if err != nil {
-		return 0, fmt.Errorf("%s: scan: %w", op, err)
-	}
-
-	return id, nil
-}
-
-func (r *PostgresRepository) SaveIdempotent(
+func (r *PostgresRepository) CreateIdempotent(
 	ctx context.Context,
 	consumer string,
 	eventID uuid.UUID,
 	n domain.Notification,
 ) (int, error) {
-	const op = "PostgresRepository.SaveIdempotent"
+	const op = "PostgresRepository.CreateIdempotent"
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {

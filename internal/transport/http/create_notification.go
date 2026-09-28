@@ -3,6 +3,7 @@ package transport_http
 import (
 	"errors"
 	"net/http"
+	"uuid"
 
 	"notifier/internal/core/domain"
 	core_errors "notifier/internal/core/errors"
@@ -54,7 +55,7 @@ func (h *NotificationsHTTPHandler) createNotification(w http.ResponseWriter, r *
 		return
 	}
 
-	n, createErr := h.notifications.Create(ctx, req.toDomain())
+	n, createErr := h.notifications.CreateIdempotent(ctx, httpConsumer, uuid.New(), req.toDomain())
 	if createErr != nil {
 		switch {
 		case errors.Is(createErr, core_errors.ErrInvalidNotification):
