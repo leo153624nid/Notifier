@@ -1,10 +1,11 @@
-package repository
+package memory_repo
 
 import (
 	"context"
 	"fmt"
 	"sync"
 	"testing"
+	"uuid"
 
 	"notifier/internal/core/domain"
 )
@@ -24,7 +25,7 @@ func TestMemoryRepository_ConcurrentSave(t *testing.T) {
 				Subject:   "Test",
 				Channel:   "console",
 			}
-			_, err := repo.Create(context.Background(), n)
+			_, err := repo.CreateIdempotent(context.Background(), "test", uuid.New(), n)
 			if err != nil {
 				t.Errorf("Save() error: %s", err)
 			}

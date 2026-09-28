@@ -1,4 +1,4 @@
-package repository
+package memory_repo
 
 import (
 	"cmp"
@@ -28,27 +28,13 @@ func NewMemoryRepository() *MemoryRepository {
 }
 
 // MARK: - `NotificationRepo` interface implementation
-func (r *MemoryRepository) Create(
-	_ context.Context,
-	n domain.Notification,
-) (int, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.nextID++
-	n.ID = r.nextID
-	n.Status = "pending"
-	r.notifications[n.ID] = n
-
-	return n.ID, nil
-}
 
 func (r *MemoryRepository) CreateIdempotent(
 	ctx context.Context,
 	consumer string,
 	eventID uuid.UUID,
 	n domain.Notification,
-) (int, error) {
+) (domain.Notification, error) {
 	const op = "MemoryRepository.CreateIdempotent"
 
 	r.mu.Lock()
@@ -56,7 +42,7 @@ func (r *MemoryRepository) CreateIdempotent(
 
 	eventKey := consumer + ":" + eventID.String()
 	if _, ok := r.events[eventKey]; ok {
-		return 0, fmt.Errorf("%s: %w", op, core_errors.ErrEventAlreadyProcessed)
+		return domain.Notification{}, fmt.Errorf("%s: %w", op, core_errors.ErrEventAlreadyProcessed)
 	}
 	r.events[eventKey] = struct{}{}
 
@@ -65,7 +51,7 @@ func (r *MemoryRepository) CreateIdempotent(
 	n.Status = "pending"
 	r.notifications[n.ID] = n
 
-	return n.ID, nil
+	return n, nil
 }
 
 func (r *MemoryRepository) GetAll(_ context.Context) ([]domain.Notification, error) {

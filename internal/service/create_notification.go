@@ -30,7 +30,7 @@ func (s *NotificationService) CreateIdempotent(
 	logger := core_logger.FromContext(ctx)
 
 	if err := n.Validate(); err != nil {
-		return domain.Notification{}, fmt.Errorf("%s: %w: %w", op, core_errors.ErrInvalidNotification, err)
+		return domain.Notification{}, fmt.Errorf("%s: %w: %v", op, core_errors.ErrInvalidNotification, err)
 	}
 
 	snd, ok := s.senders[n.Channel]
@@ -38,7 +38,7 @@ func (s *NotificationService) CreateIdempotent(
 		return domain.Notification{}, fmt.Errorf("%s: %w", op, core_errors.ErrUnsupportedChannel)
 	}
 
-	id, err := s.repo.CreateIdempotent(ctx, consumer, eventID, n)
+	n, err := s.repo.CreateIdempotent(ctx, consumer, eventID, n)
 	if err != nil {
 		if errors.Is(err, core_errors.ErrEventAlreadyProcessed) {
 			return domain.Notification{}, fmt.Errorf("%s: %w", op, core_errors.ErrEventAlreadyProcessed)
@@ -51,9 +51,6 @@ func (s *NotificationService) CreateIdempotent(
 		)
 		return domain.Notification{}, fmt.Errorf("%s: save idempotent: %w", op, err)
 	}
-
-	n.ID = id
-	n.Status = "pending"
 
 	s.wg.Add(1)
 	go s.sendAndUpdateStatus(snd, n, logger)

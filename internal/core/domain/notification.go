@@ -53,7 +53,7 @@ func NewNotificationUninitialized(
 	)
 }
 
-func (n Notification) Validate() error {
+func (n *Notification) Validate() error {
 	const op = "Notification.Validate"
 
 	if n.Recipient == "" {
@@ -63,11 +63,11 @@ func (n Notification) Validate() error {
 		return fmt.Errorf("%s: channel is required", op)
 	}
 	if utf8.RuneCountInString(n.Channel) > 20 {
-		return fmt.Errorf("%s: channel is long", op)
+		return fmt.Errorf("%s: channel is too long", op)
 	}
 	return nil
 }
 
-func (n Notification) String() string {
+func (n *Notification) String() string {
 	return fmt.Sprintf("Notification{to:%s, subject:%s, channel:%s}", n.Recipient, n.Subject, n.Channel)
 }

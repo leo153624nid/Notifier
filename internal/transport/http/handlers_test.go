@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"notifier/internal/audit"
 	"notifier/internal/core/domain"
-	"notifier/internal/repository"
+	memory_repo "notifier/internal/repository/memory"
 	"notifier/internal/sender"
 	"notifier/internal/service"
 )
@@ -38,10 +39,10 @@ func newTestHandler(
 	senders map[string]sender.Sender,
 	pingerDB service.Pinger,
 	pingerCache service.Pinger,
-) (*NotificationsHTTPHandler, *repository.MemoryRepository) {
+) (*NotificationsHTTPHandler, *memory_repo.MemoryRepository) {
 	t.Helper()
 
-	repo := repository.NewMemoryRepository()
+	repo := memory_repo.NewMemoryRepository()
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 
 	notificationService, err := service.NewNotificationService(
@@ -216,7 +217,7 @@ func TestGetNotification(t *testing.T) {
 				fakeCachePinger{},
 			)
 
-			_, err := repo.Create(context.Background(), notificationFixture())
+			_, err := repo.CreateIdempotent(context.Background(), "test", uuid.New(), notificationFixture())
 			if err != nil {
 				t.Fatalf("save notification error: %s", err)
 			}
@@ -277,7 +278,7 @@ func TestDeleteNotification(t *testing.T) {
 				fakeCachePinger{},
 			)
 
-			_, err := repo.Create(context.Background(), notificationFixture())
+			_, err := repo.CreateIdempotent(context.Background(), "test", uuid.New(), notificationFixture())
 			if err != nil {
 				t.Fatalf("save notification error: %s", err)
 			}
@@ -329,7 +330,7 @@ func TestListNotifications(t *testing.T) {
 			for _, v := range tt.ids {
 				n := notificationFixture()
 				n.Recipient = fmt.Sprintf("recipient #%d", v)
-				_, _ = repo.Create(context.Background(), n)
+				_, _ = repo.CreateIdempotent(context.Background(), "test", uuid.New(), n)
 			}
 
 			r := httptest.NewRequest("GET", "/api/v1/notifications", nil)

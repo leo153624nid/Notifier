@@ -10,14 +10,14 @@ import (
 	"notifier/internal/audit"
 	"notifier/internal/core/domain"
 	core_errors "notifier/internal/core/errors"
-	"notifier/internal/repository"
+	memory_repo "notifier/internal/repository/memory"
 	"notifier/internal/sender"
 )
 
 func newTestService(t *testing.T, senders map[string]sender.Sender) *NotificationService {
 	t.Helper()
 
-	repo := repository.NewMemoryRepository()
+	repo := memory_repo.NewMemoryRepository()
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 
 	s, err := NewNotificationService(
@@ -33,7 +33,7 @@ func newTestService(t *testing.T, senders map[string]sender.Sender) *Notificatio
 }
 
 func TestNewNotificationService(t *testing.T) {
-	repo := repository.NewMemoryRepository()
+	repo := memory_repo.NewMemoryRepository()
 	senders := map[string]sender.Sender{"console": &sender.MockSender{}}
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 

@@ -13,7 +13,7 @@ type NotificationRepo interface {
 		consumer string,
 		eventID uuid.UUID,
 		n domain.Notification,
-	) (int, error)
+	) (domain.Notification, error)
 
 	GetAll(ctx context.Context) ([]domain.Notification, error)
 

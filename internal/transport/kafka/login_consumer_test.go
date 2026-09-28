@@ -9,7 +9,7 @@ import (
 
 	authevents "contracts/events/auth/v1"
 	"notifier/internal/audit"
-	"notifier/internal/repository"
+	memory_repo "notifier/internal/repository/memory"
 	"notifier/internal/sender"
 	"notifier/internal/service"
 )
@@ -19,10 +19,10 @@ import (
 // так handleMessage проверяется как единое целое с бизнес-логикой создания
 // уведомления, а не только сам по себе разбор JSON. reader оставляем nil:
 // тесты вызывают handleMessage напрямую и никогда не обращаются к брокеру.
-func newTestConsumer(t *testing.T) (*LoginConsumer, *repository.MemoryRepository) {
+func newTestConsumer(t *testing.T) (*LoginConsumer, *memory_repo.MemoryRepository) {
 	t.Helper()
 
-	repo := repository.NewMemoryRepository()
+	repo := memory_repo.NewMemoryRepository()
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 	senders := map[string]sender.Sender{"email": &sender.MockSender{}}
 
@@ -43,10 +43,10 @@ func newTestConsumer(t *testing.T) (*LoginConsumer, *repository.MemoryRepository
 // newTestConsumerWithSender — как newTestConsumer, но возвращает и сам
 // *sender.MockSender, чтобы тесты идемпотентности могли проверить,
 // сколько раз реально была вызвана отправка письма.
-func newTestConsumerWithSender(t *testing.T) (*LoginConsumer, *repository.MemoryRepository, *sender.MockSender) {
+func newTestConsumerWithSender(t *testing.T) (*LoginConsumer, *memory_repo.MemoryRepository, *sender.MockSender) {
 	t.Helper()
 
-	repo := repository.NewMemoryRepository()
+	repo := memory_repo.NewMemoryRepository()
 	auditLogger := audit.NewLogger(t.TempDir() + "/audit.log")
 	mockSnd := &sender.MockSender{}
 	senders := map[string]sender.Sender{"email": mockSnd}
