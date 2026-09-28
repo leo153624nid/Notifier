@@ -2,6 +2,7 @@ package core_http_middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	core_errors "notifier/internal/core/errors"
 	core_logger "notifier/internal/core/logger"
 	core_http_response "notifier/internal/core/transport/http/response"
 )
@@ -33,7 +33,7 @@ type jwtClaims struct {
 	UserID uuid.UUID `json:"sub"`
 }
 
-func getUserID(ctx context.Context) (uuid.UUID, bool) { // TODO: delete ?
+func getUserID(ctx context.Context) (uuid.UUID, bool) {
 	id, ok := ctx.Value(userIDKey).(uuid.UUID)
 	return id, ok
 }
@@ -82,8 +82,7 @@ func parseUserID(tokenString, secret string) (uuid.UUID, error) {
 func Auth(jwtSecret string) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			logger := core_logger.FromContext(ctx)
+			logger := core_logger.FromContext(r.Context())
 			rh := core_http_response.NewHTTPResponseHandler(logger, w)
 
 			tokenString, ok := bearerToken(r)
@@ -93,7 +92,7 @@ func Auth(jwtSecret string) Middleware {
 					r.URL.Path,
 					r.Method,
 					r.RemoteAddr,
-					core_errors.ErrAuth,
+					errors.New("invalid or missing bearer token"),
 				)
 				return
 			}
@@ -110,7 +109,7 @@ func Auth(jwtSecret string) Middleware {
 				return
 			}
 
-			ctx = context.WithValue(ctx, userIDKey, userID)
+			ctx := context.WithValue(r.Context(), userIDKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
