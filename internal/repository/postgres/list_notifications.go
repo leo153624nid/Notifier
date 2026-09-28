@@ -9,10 +9,10 @@ import (
 	"notifier/internal/core/domain"
 )
 
-func (r *PostgresRepository) GetList(ctx context.Context, page int, size int) ([]domain.Notification, error) {
+func (r *Repository) GetList(ctx context.Context, page int, size int) ([]domain.Notification, error) {
 	const op = "PostgresRepository.GetList"
 
-	rows, err := r.db.Query(
+	rows, err := r.pool.Query(
 		ctx,
 		`SELECT
 		id, recipient, subject, body, channel, is_urgent, status
@@ -37,10 +37,10 @@ func (r *PostgresRepository) GetList(ctx context.Context, page int, size int) ([
 	return result, nil
 }
 
-func (r *PostgresRepository) GetAll(ctx context.Context) ([]domain.Notification, error) {
+func (r *Repository) GetAll(ctx context.Context) ([]domain.Notification, error) {
 	const op = "PostgresRepository.GetAll"
 
-	rows, err := r.db.Query(
+	rows, err := r.pool.Query(
 		ctx,
 		`SELECT 
 		id, recipient, subject, body, channel, is_urgent, status 

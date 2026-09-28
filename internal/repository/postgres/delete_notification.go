@@ -7,13 +7,13 @@ import (
 	core_errors "notifier/internal/core/errors"
 )
 
-func (r *PostgresRepository) DeleteById(
+func (r *Repository) DeleteById(
 	ctx context.Context,
 	id int,
 ) error {
 	const op = "PostgresRepository.DeleteById"
 
-	result, err := r.db.Exec(
+	result, err := r.pool.Exec(
 		ctx,
 		`DELETE 
 		FROM notifications WHERE id=$1`,

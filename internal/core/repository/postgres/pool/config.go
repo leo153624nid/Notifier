@@ -1,8 +1,9 @@
-package postgres
+package core_postgres_pool
 
 import (
 	"fmt"
 	"net/url"
+	"time"
 
 	core_config "notifier/internal/core/config"
 )
@@ -14,6 +15,7 @@ type Config struct {
 	Password string
 	DBName   string
 	SSLMode  string
+	Timeout  time.Duration
 }
 
 func (c Config) DSN() string {
@@ -49,5 +51,6 @@ func LoadConfig() Config {
 		Password: core_config.GetEnv("PG_PASSWORD", "notifier"),
 		DBName:   core_config.GetEnv("PG_DBNAME", "notifier"),
 		SSLMode:  core_config.GetEnv("PG_SSLMODE", "disable"),
+		Timeout:  10 * time.Second, // TODO ?
 	}
 }

@@ -11,14 +11,14 @@ import (
 	core_errors "notifier/internal/core/errors"
 )
 
-func (r *PostgresRepository) GetById(
+func (r *Repository) GetById(
 	ctx context.Context,
 	id int,
 ) (domain.Notification, error) {
 	const op = "PostgresRepository.GetById"
 
 	var n domain.Notification
-	err := r.db.QueryRow(
+	err := r.pool.QueryRow(
 		ctx,
 		`SELECT 
 		id, recipient, subject, body, channel, is_urgent, status 

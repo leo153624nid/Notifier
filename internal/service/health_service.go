@@ -19,10 +19,10 @@ func NewHealthService(pingerDB, pingerCache Pinger) *HealthService {
 	}
 }
 
-func (h *HealthService) CheckDB(ctx context.Context) error {
-	return h.pingerDB.Ping(ctx)
+func (s *HealthService) CheckDB(ctx context.Context) error {
+	return s.pingerDB.Ping(ctx)
 }
 
-func (h *HealthService) CheckCache(ctx context.Context) error {
-	return h.pingerCache.Ping(ctx)
+func (s *HealthService) CheckCache(ctx context.Context) error {
+	return s.pingerCache.Ping(ctx)
 }

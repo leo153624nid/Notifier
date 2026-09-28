@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
@@ -17,6 +16,7 @@ import (
 	"notifier/internal/cache"
 	core_config "notifier/internal/core/config"
 	core_logger "notifier/internal/core/logger"
+	core_postgres_pool "notifier/internal/core/repository/postgres/pool"
 	core_http_middleware "notifier/internal/core/transport/http/middleware"
 	core_http_server "notifier/internal/core/transport/http/server"
 	cached_repo "notifier/internal/repository/cache"
@@ -69,15 +69,10 @@ func main() {
 	ctxDbInit, cancelDbInit := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelDbInit()
 
-	postgresCfg := postgres.LoadConfig()
-	db, dbErr := pgxpool.New(ctxDbInit, postgresCfg.DSN())
-	if dbErr != nil {
-		logger.Error("pgxpool.new", zap.Error(dbErr))
-		os.Exit(1)
-	}
-
-	if err := db.Ping(ctxDbInit); err != nil {
-		logger.Error("db ping failed", zap.Error(err))
+	postgresCfg := core_postgres_pool.LoadConfig()
+	pool, poolErr := core_postgres_pool.NewConnectionPool(ctxDbInit, postgresCfg)
+	if poolErr != nil {
+		logger.Error("new connection pool", zap.Error(poolErr))
 		os.Exit(1)
 	}
 	logger.Warn("database connected")
@@ -87,7 +82,7 @@ func main() {
 	// приложением — так безопаснее при нескольких репликах и позволяет
 	// откатывать миграции независимо от релизов сервиса.
 
-	postgresRepo := postgres.NewPostgresRepository(db, logger)
+	postgresRepo := postgres.NewRepository(pool)
 
 	// MARK: Start cache client
 	logger.Warn("start cache client ...")
@@ -114,7 +109,6 @@ func main() {
 	repo := cached_repo.NewCachedNotificationRepo(
 		postgresRepo,
 		cacheRepo,
-		logger,
 		30*time.Second, // TTL
 	)
 
@@ -140,7 +134,7 @@ func main() {
 	}
 
 	healthService := service.NewHealthService(
-		db,
+		pool,
 		cache.NewPinger(cacheRepo),
 	)
 
@@ -252,7 +246,7 @@ func main() {
 		)
 	}
 	logger.Debug("close database ...")
-	db.Close()
+	pool.Close()
 
 	logger.Warn("shutdown completed")
 }

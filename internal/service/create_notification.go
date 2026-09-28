@@ -70,10 +70,13 @@ func (s *NotificationService) sendAndUpdateStatus(
 
 	sendCtx = core_logger.ToContext(sendCtx, logger)
 
-	status := "sent"
+	var status string
 	if err := snd.Send(sendCtx, n); err != nil {
 		logger.Error(
 			"notification send failed",
+			zap.Int("id", n.ID),
+			zap.String("recipient", n.Recipient),
+			zap.String("channel", n.Channel),
 			zap.Error(err),
 		)
 		status = "failed"
@@ -81,8 +84,10 @@ func (s *NotificationService) sendAndUpdateStatus(
 		logger.Info(
 			"notification sent",
 			zap.Int("id", n.ID),
+			zap.String("recipient", n.Recipient),
 			zap.String("channel", n.Channel),
 		)
+		status = "sent"
 	}
 
 	updateCtx, updateCancel := context.WithTimeout(context.Background(), sendTimeout)

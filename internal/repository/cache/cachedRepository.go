@@ -7,28 +7,24 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	core_logger "notifier/internal/core/logger"
 	"notifier/internal/service"
 )
 
 type CachedNotificationRepo struct {
-	repo   service.NotificationRepo
-	redis  *redis.Client
-	logger *core_logger.Logger
-	ttl    time.Duration
+	repo  service.NotificationRepo
+	cache *redis.Client
+	ttl   time.Duration
 }
 
 func NewCachedNotificationRepo(
 	repo service.NotificationRepo,
-	redis *redis.Client,
-	logger *core_logger.Logger,
+	cache *redis.Client,
 	ttl time.Duration,
 ) *CachedNotificationRepo {
 	return &CachedNotificationRepo{
-		repo:   repo,
-		redis:  redis,
-		logger: logger,
-		ttl:    ttl,
+		repo:  repo,
+		cache: cache,
+		ttl:   ttl,
 	}
 }
 
@@ -43,7 +39,7 @@ func notificationsListCacheKey(page, size int) string {
 
 func (r *CachedNotificationRepo) invalidateNotificationCache(ctx context.Context, id int) error {
 	key := notificationCacheKey(id)
-	if err := r.redis.Del(ctx, key).Err(); err != nil {
+	if err := r.cache.Del(ctx, key).Err(); err != nil {
 		return err
 	}
 	return nil

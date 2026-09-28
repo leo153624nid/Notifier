@@ -7,14 +7,14 @@ import (
 	core_errors "notifier/internal/core/errors"
 )
 
-func (r *PostgresRepository) UpdateStatus(
+func (r *Repository) UpdateStatus(
 	ctx context.Context,
 	id int,
 	status string,
 ) error {
 	const op = "PostgresRepository.UpdateStatus"
 
-	tag, err := r.db.Exec(
+	tag, err := r.pool.Exec(
 		ctx,
 		`UPDATE notifications SET status=$1 WHERE id=$2`,
 		status, id,

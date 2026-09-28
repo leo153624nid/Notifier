@@ -9,9 +9,10 @@ import (
 
 	"notifier/internal/core/domain"
 	core_errors "notifier/internal/core/errors"
+	core_logger "notifier/internal/core/logger"
 )
 
-func (r *PostgresRepository) CreateIdempotent(
+func (r *Repository) CreateIdempotent(
 	ctx context.Context,
 	consumer string,
 	eventID uuid.UUID,
@@ -19,13 +20,15 @@ func (r *PostgresRepository) CreateIdempotent(
 ) (domain.Notification, error) {
 	const op = "PostgresRepository.CreateIdempotent"
 
-	tx, err := r.db.Begin(ctx)
+	logger := core_logger.FromContext(ctx)
+
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return domain.Notification{}, fmt.Errorf("%s: begin: %w", op, err)
 	}
 	defer func() {
 		if rollErr := tx.Rollback(ctx); rollErr != nil {
-			r.logger.Error(
+			logger.Error(
 				"rollback failed",
 				zap.String("op", op),
 				zap.Error(rollErr),
