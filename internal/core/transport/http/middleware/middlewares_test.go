@@ -8,6 +8,7 @@ import (
 	"time"
 	"uuid"
 
+	core_logger "notifier/internal/core/logger"
 	core_http_response "notifier/internal/core/transport/http/response"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -181,7 +182,7 @@ func TestAuthMiddleware_AllowsValidToken(t *testing.T) {
 	tok := newTestToken(t, userID, secret, time.Minute)
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r := newRequest("/")
 	r.Header.Set("Authorization", "Bearer "+tok)
 
 	handler.ServeHTTP(w, r)
@@ -218,7 +219,7 @@ func TestAuthMiddleware_Rejects(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r := newRequest("/")
 			if tt.header != "" {
 				r.Header.Set("Authorization", tt.header)
 			}
@@ -240,8 +241,17 @@ func TestAuthMiddleware_Rejects(t *testing.T) {
 	}
 }
 
+// newRequest создаёт GET-запрос с логгером в контексте: middleware берут
+// логгер через core_logger.FromContext, который без него паникует.
+func newRequest(target string) *http.Request {
+	r := httptest.NewRequest(http.MethodGet, target, nil)
+	ctx := core_logger.ToContext(r.Context(), core_logger.NewNop())
+
+	return r.WithContext(ctx)
+}
+
 func newRequestFromIP(remoteAddr string) *http.Request {
-	r := httptest.NewRequest("GET", "/", nil)
+	r := newRequest("/")
 	r.RemoteAddr = remoteAddr
 	return r
 }

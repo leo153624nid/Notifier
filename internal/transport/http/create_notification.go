@@ -15,9 +15,9 @@ import (
 type CreateNotificationRequest struct {
 	To      string `json:"to" validate:"required"`
 	Subject string `json:"subject" validate:"required"`
-	Body    string `json:"body" validate:"required"`
+	Body    string `json:"body"`
 	Channel string `json:"channel" validate:"required"`
-	Urgent  bool   `json:"urgent" validate:"required"`
+	Urgent  bool   `json:"urgent"`
 }
 
 type CreateNotificationResponse NotificationResponse

@@ -24,7 +24,7 @@ func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.
 	defer cancelDB()
 
 	if err := h.health.CheckDB(ctxDB); err != nil {
-		rh.ErrorResponse("db health check failed", err)
+		rh.UnavailableResponse("db health check failed", err)
 		return
 	}
 
@@ -32,7 +32,7 @@ func (h *NotificationsHTTPHandler) healthHandler(w http.ResponseWriter, r *http.
 	defer cancelCache()
 
 	if err := h.health.CheckCache(ctxCache); err != nil {
-		rh.ErrorResponse("cache health check failed", err)
+		rh.UnavailableResponse("cache health check failed", err)
 		return
 	}
 

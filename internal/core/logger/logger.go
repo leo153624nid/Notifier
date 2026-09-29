@@ -56,8 +56,18 @@ func NewLogger(cfg LoggerConfig) (*Logger, error) {
 	}, nil
 }
 
+// NewNop возвращает логгер, который ничего не пишет и не трогает файловую
+// систему. Нужен тестам, чтобы не зависеть от env и лог-файлов.
+func NewNop() *Logger {
+	return &Logger{Logger: zap.NewNop()}
+}
+
 func (l *Logger) Close() {
 	const op = "Logger.Close"
+
+	if l.file == nil {
+		return
+	}
 
 	if err := l.file.Close(); err != nil {
 		fmt.Println("failed to close log file", "op", op, "err", err)

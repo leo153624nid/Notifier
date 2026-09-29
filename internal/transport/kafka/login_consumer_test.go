@@ -9,6 +9,7 @@ import (
 
 	authevents "contracts/events/auth/v1"
 	"notifier/internal/audit"
+	core_logger "notifier/internal/core/logger"
 	memory_repo "notifier/internal/repository/memory"
 	"notifier/internal/sender"
 	"notifier/internal/service"
@@ -76,13 +77,13 @@ func TestLoginConsumer_HandleMessage(t *testing.T) {
 		}
 		payload := marshalEvent(t, event)
 
-		if err := c.handleMessage(context.Background(), payload); err != nil {
+		if err := c.handleMessage(testContext(), payload); err != nil {
 			t.Fatalf("handleMessage() error: %s", err)
 		}
 
 		c.service.Wait()
 
-		list, err := repo.GetList(context.Background(), new(1), new(10))
+		list, err := repo.GetList(testContext(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}
@@ -100,12 +101,12 @@ func TestLoginConsumer_HandleMessage(t *testing.T) {
 	t.Run("invalid JSON returns error and creates nothing", func(t *testing.T) {
 		c, repo := newTestConsumer(t)
 
-		err := c.handleMessage(context.Background(), []byte("not json"))
+		err := c.handleMessage(testContext(), []byte("not json"))
 		if err == nil {
 			t.Fatal("handleMessage() error = nil, want error for invalid JSON")
 		}
 
-		list, err := repo.GetList(context.Background(), new(1), new(10))
+		list, err := repo.GetList(testContext(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}
@@ -120,11 +121,11 @@ func TestLoginConsumer_HandleMessage(t *testing.T) {
 		event := authevents.UserLoggedIn{UserID: uuid.New(), Email: "", OccurredAt: time.Now()}
 		payload := marshalEvent(t, event)
 
-		if err := c.handleMessage(context.Background(), payload); err == nil {
+		if err := c.handleMessage(testContext(), payload); err == nil {
 			t.Fatal("handleMessage() error = nil, want error for empty recipient")
 		}
 
-		list, err := repo.GetList(context.Background(), new(1), new(10))
+		list, err := repo.GetList(testContext(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}
@@ -150,18 +151,18 @@ func TestLoginConsumer_Idempotency(t *testing.T) {
 		}
 		payload := marshalEvent(t, event)
 
-		if err := c.handleMessage(context.Background(), payload); err != nil {
+		if err := c.handleMessage(testContext(), payload); err != nil {
 			t.Fatalf("first handleMessage() error: %s", err)
 		}
 		// Повторная доставка того же сообщения — например, после ретрая
 		// producer'а или повторной обработки consumer'ом до коммита offset.
-		if err := c.handleMessage(context.Background(), payload); err != nil {
+		if err := c.handleMessage(testContext(), payload); err != nil {
 			t.Fatalf("duplicate handleMessage() error = %v, want nil (duplicate must not be treated as failure)", err)
 		}
 
 		c.service.Wait()
 
-		list, err := repo.GetList(context.Background(), new(1), new(10))
+		list, err := repo.GetList(testContext(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}
@@ -183,16 +184,16 @@ func TestLoginConsumer_Idempotency(t *testing.T) {
 		first := authevents.UserLoggedIn{EventID: uuid.New(), UserID: uuid.New(), Email: "a@mail.com", OccurredAt: time.Now()}
 		second := authevents.UserLoggedIn{EventID: uuid.New(), UserID: uuid.New(), Email: "b@mail.com", OccurredAt: time.Now()}
 
-		if err := c.handleMessage(context.Background(), marshalEvent(t, first)); err != nil {
+		if err := c.handleMessage(testContext(), marshalEvent(t, first)); err != nil {
 			t.Fatalf("handleMessage(first) error: %s", err)
 		}
-		if err := c.handleMessage(context.Background(), marshalEvent(t, second)); err != nil {
+		if err := c.handleMessage(testContext(), marshalEvent(t, second)); err != nil {
 			t.Fatalf("handleMessage(second) error: %s", err)
 		}
 
 		c.service.Wait()
 
-		list, err := repo.GetList(context.Background(), new(1), new(10))
+		list, err := repo.GetList(testContext(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}
@@ -204,6 +205,12 @@ func TestLoginConsumer_Idempotency(t *testing.T) {
 			t.Fatalf("sender Send() calls = %d, want 2", calls)
 		}
 	})
+}
+
+// testContext возвращает контекст с no-op логгером: сервис достаёт логгер
+// через core_logger.FromContext, который без него паникует.
+func testContext() context.Context {
+	return core_logger.ToContext(context.Background(), core_logger.NewNop())
 }
 
 func marshalEvent(t *testing.T, event authevents.UserLoggedIn) []byte {

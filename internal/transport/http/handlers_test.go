@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"notifier/internal/audit"
 	"notifier/internal/core/domain"
+	core_logger "notifier/internal/core/logger"
 	memory_repo "notifier/internal/repository/memory"
 	"notifier/internal/sender"
 	"notifier/internal/service"
@@ -32,6 +34,16 @@ func (f fakeDbPinger) Ping(context.Context) error {
 
 func (f fakeCachePinger) Ping(context.Context) error {
 	return f.err
+}
+
+// testContext возвращает контекст с no-op логгером: хендлеры и сервис
+// достают логгер через core_logger.FromContext, который без него паникует.
+func testContext() context.Context {
+	return core_logger.ToContext(context.Background(), core_logger.NewNop())
+}
+
+func newRequest(method, target string, body io.Reader) *http.Request {
+	return httptest.NewRequest(method, target, body).WithContext(testContext())
 }
 
 func newTestHandler(
@@ -71,7 +83,7 @@ func TestHealthHandler(t *testing.T) {
 		fakeCachePinger{},
 	)
 
-	r := httptest.NewRequest("GET", "/health", nil)
+	r := newRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
 	h.healthHandler(w, r)
@@ -92,7 +104,7 @@ func TestHealthHandler_DBUnavailable(t *testing.T) {
 		fakeCachePinger{},
 	)
 
-	r := httptest.NewRequest("GET", "/health", nil)
+	r := newRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
 	h.healthHandler(w, r)
@@ -110,7 +122,7 @@ func TestHealthHandler_CacheUnavailable(t *testing.T) {
 		fakeCachePinger{err: errors.New("connection refused")},
 	)
 
-	r := httptest.NewRequest("GET", "/health", nil)
+	r := newRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
 	h.healthHandler(w, r)
@@ -163,7 +175,7 @@ func TestCreateNotification(t *testing.T) {
 				fakeCachePinger{},
 			)
 
-			r := httptest.NewRequest("POST", "/api/v1/notifications", strings.NewReader(tt.body))
+			r := newRequest(http.MethodPost, "/api/v1/notifications", strings.NewReader(tt.body))
 			w := httptest.NewRecorder()
 
 			h.createNotification(w, r)
@@ -217,12 +229,12 @@ func TestGetNotification(t *testing.T) {
 				fakeCachePinger{},
 			)
 
-			_, err := repo.CreateIdempotent(context.Background(), "test", uuid.New(), notificationFixture())
+			_, err := repo.CreateIdempotent(testContext(), "test", uuid.New(), notificationFixture())
 			if err != nil {
 				t.Fatalf("save notification error: %s", err)
 			}
 
-			r := httptest.NewRequest("GET", "/api/v1/notifications/{id}", nil)
+			r := newRequest(http.MethodGet, "/api/v1/notifications/{id}", nil)
 			r.SetPathValue("id", tt.id)
 			w := httptest.NewRecorder()
 
@@ -278,12 +290,12 @@ func TestDeleteNotification(t *testing.T) {
 				fakeCachePinger{},
 			)
 
-			_, err := repo.CreateIdempotent(context.Background(), "test", uuid.New(), notificationFixture())
+			_, err := repo.CreateIdempotent(testContext(), "test", uuid.New(), notificationFixture())
 			if err != nil {
 				t.Fatalf("save notification error: %s", err)
 			}
 
-			r := httptest.NewRequest("DELETE", "/api/v1/notifications/{id}", nil)
+			r := newRequest(http.MethodDelete, "/api/v1/notifications/{id}", nil)
 			r.SetPathValue("id", tt.id)
 			w := httptest.NewRecorder()
 
@@ -330,10 +342,10 @@ func TestListNotifications(t *testing.T) {
 			for _, v := range tt.ids {
 				n := notificationFixture()
 				n.Recipient = fmt.Sprintf("recipient #%d", v)
-				_, _ = repo.CreateIdempotent(context.Background(), "test", uuid.New(), n)
+				_, _ = repo.CreateIdempotent(testContext(), "test", uuid.New(), n)
 			}
 
-			r := httptest.NewRequest("GET", "/api/v1/notifications", nil)
+			r := newRequest(http.MethodGet, "/api/v1/notifications", nil)
 			w := httptest.NewRecorder()
 
 			h.listNotifications(w, r)

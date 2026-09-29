@@ -67,6 +67,10 @@ func (h *HTTPResponseHandler) AuthErrorResponse(
 	h.JSONResponse(response, http.StatusUnauthorized)
 }
 
+func (h *HTTPResponseHandler) NoContentResponse() {
+	h.rw.WriteHeader(http.StatusNoContent)
+}
+
 func (h *HTTPResponseHandler) ErrorResponse(msg string, err error) {
 	var (
 		statusCode int
@@ -113,6 +117,13 @@ func (h *HTTPResponseHandler) ErrorResponse(msg string, err error) {
 		err,
 		msg,
 	)
+}
+
+// UnavailableResponse отвечает 503: зависимость (БД, кэш) недоступна.
+func (h *HTTPResponseHandler) UnavailableResponse(msg string, err error) {
+	h.logger.Error(msg, zap.Error(err))
+
+	h.errorResponse(http.StatusServiceUnavailable, err, msg)
 }
 
 func (h *HTTPResponseHandler) PanicResponse(p any, msg string) {

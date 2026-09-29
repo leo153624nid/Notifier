@@ -92,6 +92,7 @@ func RateLimiter(limiter *IpRateLimiter) Middleware {
 				w.WriteHeader(http.StatusTooManyRequests)
 
 				resp := core_http_response.APIError{
+					Error:   "too many requests",
 					Message: "too many requests",
 				}
 				_ = json.NewEncoder(w).Encode(resp)

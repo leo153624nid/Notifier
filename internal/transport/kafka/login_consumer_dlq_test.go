@@ -120,7 +120,7 @@ func TestLoginConsumer_SendToDLQ(t *testing.T) {
 	}
 	cause := errors.New("boom")
 
-	if err := c.sendToDLQ(context.Background(), msg, cause); err != nil {
+	if err := c.sendToDLQ(testContext(), msg, cause); err != nil {
 		t.Fatalf("sendToDLQ() error: %s", err)
 	}
 
@@ -154,11 +154,9 @@ func TestLoginConsumer_SendToDLQ(t *testing.T) {
 func runUntilQueueDrained(t *testing.T, c *LoginConsumer, r *mockReader) {
 	t.Helper()
 
-	logger, _ := core_logger.NewLogger(
-		core_logger.NewConfigMust(),
-	)
+	logger := core_logger.NewNop()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(testContext())
 	done := make(chan struct{})
 	go func() {
 		c.Run(ctx, logger)

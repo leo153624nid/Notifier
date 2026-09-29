@@ -72,14 +72,20 @@ func (r *MemoryRepository) GetList(
 	page *int,
 	size *int,
 ) ([]domain.Notification, error) {
-	var pg int
-	var sz int
-	if page != nil && size != nil {
-		pg = *page
-		sz = *size
-	} else {
-		return nil, core_errors.ErrInvalidArgument
+	// Без параметров пагинации возвращаем всё — как Postgres-репозиторий.
+	if page == nil || size == nil {
+		all, err := r.GetAll(ctx)
+		if err != nil {
+			return nil, err
+		}
+		slices.SortFunc(all, func(a, b domain.Notification) int {
+			return cmp.Compare(a.ID, b.ID)
+		})
+
+		return all, nil
 	}
+
+	pg, sz := *page, *size
 	if pg <= 0 {
 		pg = 1
 	}
