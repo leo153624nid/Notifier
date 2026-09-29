@@ -19,8 +19,8 @@ type NotificationRepo interface {
 
 	GetList(
 		ctx context.Context,
-		page int,
-		size int,
+		page *int,
+		size *int,
 	) ([]domain.Notification, error)
 
 	GetById(

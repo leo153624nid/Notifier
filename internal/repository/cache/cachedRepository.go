@@ -33,8 +33,11 @@ func notificationCacheKey(id int) string {
 	return fmt.Sprintf("notifier:v1:notification:%d", id)
 }
 
-func notificationsListCacheKey(page, size int) string {
-	return fmt.Sprintf("notifier:v1:notifications:page:%d:size:%d", page, size)
+func notificationsListCacheKey(page, size *int) string {
+	if page != nil && size != nil {
+		return fmt.Sprintf("notifier:v1:notifications:page:%dsize:%d", *page, *size)
+	}
+	return fmt.Sprintf("notifier:v1:notifications:page:%ssize:%s", "all", "all")
 }
 
 func (r *CachedNotificationRepo) invalidateNotificationCache(ctx context.Context, id int) error {

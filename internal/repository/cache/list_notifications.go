@@ -12,8 +12,8 @@ import (
 
 func (r *CachedNotificationRepo) GetList(
 	ctx context.Context,
-	page int,
-	size int,
+	page *int,
+	size *int,
 ) ([]domain.Notification, error) {
 	const op = "CachedNotificationRepo.GetList"
 
@@ -22,7 +22,11 @@ func (r *CachedNotificationRepo) GetList(
 
 	cached, err := r.cache.Get(ctx, key).Bytes()
 	if err == nil {
-		result := make([]domain.Notification, size)
+		cap := 100
+		if size != nil {
+			cap = *size
+		}
+		result := make([]domain.Notification, cap)
 		if jsonErr := json.Unmarshal(cached, &result); jsonErr == nil {
 			logger.Debug("cache used")
 			return result, nil

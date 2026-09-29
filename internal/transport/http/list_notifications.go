@@ -1,52 +1,24 @@
 package transport_http
 
 import (
+	"fmt"
 	"net/http"
-	"strconv"
 
-	"notifier/internal/core/domain"
 	core_logger "notifier/internal/core/logger"
 	core_http_response "notifier/internal/core/transport/http/response"
+	core_http_utils "notifier/internal/core/transport/http/utils"
 )
-
-type NotificationResponse struct {
-	Recipient string `json:"to"`
-	Subject   string `json:"subject"`
-	Body      string `json:"body"`
-	Channel   string `json:"channel"`
-	Status    string `json:"status"`
-	ID        int    `json:"id"`
-	IsUrgent  bool   `json:"urgent"`
-}
-
-func toNotificationResponse(n domain.Notification) NotificationResponse {
-	return NotificationResponse{
-		ID:        n.ID,
-		Recipient: n.Recipient,
-		Subject:   n.Subject,
-		Body:      n.Body,
-		Channel:   n.Channel,
-		Status:    n.Status,
-		IsUrgent:  n.IsUrgent,
-	}
-}
-
-func toListNotificationResponse(notifications []domain.Notification) []NotificationResponse {
-	result := make([]NotificationResponse, len(notifications))
-	for i, n := range notifications {
-		result[i] = toNotificationResponse(n)
-	}
-	return result
-}
 
 func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := core_logger.FromContext(ctx)
 	rh := core_http_response.NewHTTPResponseHandler(logger, w)
 
-	query := r.URL.Query()
-	page, _ := strconv.Atoi(query.Get("page"))
-	size, _ := strconv.Atoi(query.Get("size"))
+	page, size, err := getPaginationParams(r)
+	if err != nil {
+		rh.ErrorResponse("wrong pagination params: %w", err)
+		return
+	}
 
 	notifications, err := h.notifications.List(ctx, page, size)
 	if err != nil {
@@ -56,4 +28,18 @@ func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *h
 
 	resp := toListNotificationResponse(notifications)
 	rh.JSONResponse(resp, http.StatusOK)
+}
+
+func getPaginationParams(r *http.Request) (page *int, size *int, err error) {
+	page, pageErr := core_http_utils.GetIntQueryParam(r, "page")
+	if pageErr != nil {
+		return nil, nil, fmt.Errorf("`page` param failed: %w", pageErr)
+	}
+
+	size, sizeErr := core_http_utils.GetIntQueryParam(r, "size")
+	if sizeErr != nil {
+		return nil, nil, fmt.Errorf("`size` param failed: %w", sizeErr)
+	}
+
+	return page, size, nil
 }

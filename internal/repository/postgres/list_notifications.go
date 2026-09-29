@@ -9,19 +9,33 @@ import (
 	"notifier/internal/core/domain"
 )
 
-func (r *Repository) GetList(ctx context.Context, page int, size int) ([]domain.Notification, error) {
+func (r *Repository) GetList(
+	ctx context.Context,
+	page *int,
+	size *int,
+) ([]domain.Notification, error) {
 	const op = "PostgresRepository.GetList"
 
 	ctx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
 	defer cancel()
 
+	var limit *int
+	var offset *int
+	if page != nil && size != nil {
+		s := *size
+		limit = new(s)
+		p := (*page - 1) * (*limit)
+		offset = new(p)
+	}
+
 	rows, err := r.pool.Query(
 		ctx,
 		`SELECT
 		id, recipient, subject, body, channel, is_urgent, status
-		FROM notifications ORDER BY id LIMIT $1 OFFSET $2;`,
-		size,
-		(page-1)*size,
+		FROM notifications ORDER BY id ASC
+		LIMIT $1 OFFSET $2;`,
+		limit,
+		offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: query: %w", op, err)

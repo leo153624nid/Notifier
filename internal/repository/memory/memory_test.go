@@ -157,7 +157,7 @@ func TestGetList(t *testing.T) {
 				repo.notifications[n.ID] = n
 			}
 
-			list, _ := repo.GetList(context.Background(), tt.page, tt.size)
+			list, _ := repo.GetList(context.Background(), new(tt.page), new(tt.size))
 
 			if len(list) != tt.len {
 				t.Errorf("list len %d, want %d", len(list), tt.len)

@@ -82,7 +82,7 @@ func TestLoginConsumer_HandleMessage(t *testing.T) {
 
 		c.service.Wait()
 
-		list, err := repo.GetList(context.Background(), 1, 10)
+		list, err := repo.GetList(context.Background(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}
@@ -105,7 +105,7 @@ func TestLoginConsumer_HandleMessage(t *testing.T) {
 			t.Fatal("handleMessage() error = nil, want error for invalid JSON")
 		}
 
-		list, err := repo.GetList(context.Background(), 1, 10)
+		list, err := repo.GetList(context.Background(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}
@@ -124,7 +124,7 @@ func TestLoginConsumer_HandleMessage(t *testing.T) {
 			t.Fatal("handleMessage() error = nil, want error for empty recipient")
 		}
 
-		list, err := repo.GetList(context.Background(), 1, 10)
+		list, err := repo.GetList(context.Background(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}
@@ -161,7 +161,7 @@ func TestLoginConsumer_Idempotency(t *testing.T) {
 
 		c.service.Wait()
 
-		list, err := repo.GetList(context.Background(), 1, 10)
+		list, err := repo.GetList(context.Background(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}
@@ -192,7 +192,7 @@ func TestLoginConsumer_Idempotency(t *testing.T) {
 
 		c.service.Wait()
 
-		list, err := repo.GetList(context.Background(), 1, 10)
+		list, err := repo.GetList(context.Background(), new(1), new(10))
 		if err != nil {
 			t.Fatalf("GetList() error: %s", err)
 		}

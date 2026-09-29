@@ -234,7 +234,7 @@ func TestNotificationService_List(t *testing.T) {
 	}
 	s.Wait()
 
-	list, err := s.List(context.Background(), 0, 0)
+	list, err := s.List(context.Background(), new(0), new(0))
 	if err != nil {
 		t.Fatalf("List() error: %s", err)
 	}

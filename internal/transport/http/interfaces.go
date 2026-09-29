@@ -28,8 +28,8 @@ type NotificationService interface {
 	// List возвращает страницу уведомлений, нормализуя page/size к разумным значениям по умолчанию.
 	List(
 		ctx context.Context,
-		page int,
-		size int,
+		page *int,
+		size *int,
 	) ([]domain.Notification, error)
 
 	// Export выгружает все уведомления в аудит-лог и возвращает количество экспортированных записей.

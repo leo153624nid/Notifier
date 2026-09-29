@@ -27,8 +27,8 @@ func (model *NotificationModel) toDomain() domain.Notification {
 func listModelsToDomain(models []NotificationModel) []domain.Notification {
 	result := make([]domain.Notification, len(models))
 
-	for _, m := range models {
-		result = append(result, m.toDomain())
+	for i, m := range models {
+		result[i] = m.toDomain()
 	}
 
 	return result

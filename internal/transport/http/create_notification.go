@@ -32,18 +32,6 @@ func (r CreateNotificationRequest) toDomain() domain.Notification {
 	)
 }
 
-func toCreateNotificationResponse(n domain.Notification) CreateNotificationResponse {
-	return CreateNotificationResponse{
-		ID:        n.ID,
-		Recipient: n.Recipient,
-		Subject:   n.Subject,
-		Body:      n.Body,
-		Channel:   n.Channel,
-		Status:    n.Status,
-		IsUrgent:  n.IsUrgent,
-	}
-}
-
 func (h *NotificationsHTTPHandler) createNotification(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := core_logger.FromContext(ctx)
@@ -68,6 +56,6 @@ func (h *NotificationsHTTPHandler) createNotification(w http.ResponseWriter, r *
 		return
 	}
 
-	resp := toCreateNotificationResponse(n)
+	resp := CreateNotificationResponse(toNotificationResponse(n))
 	rh.JSONResponse(resp, http.StatusAccepted)
 }

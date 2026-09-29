@@ -6,25 +6,12 @@ import (
 	"net/http"
 	"strconv"
 
-	"notifier/internal/core/domain"
 	core_errors "notifier/internal/core/errors"
 	core_logger "notifier/internal/core/logger"
 	core_http_response "notifier/internal/core/transport/http/response"
 )
 
 type GetNotificationResponse NotificationResponse
-
-func toGetNotificationResponse(n domain.Notification) GetNotificationResponse {
-	return GetNotificationResponse{
-		ID:        n.ID,
-		Recipient: n.Recipient,
-		Subject:   n.Subject,
-		Body:      n.Body,
-		Channel:   n.Channel,
-		Status:    n.Status,
-		IsUrgent:  n.IsUrgent,
-	}
-}
 
 func (h *NotificationsHTTPHandler) getNotification(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -55,6 +42,6 @@ func (h *NotificationsHTTPHandler) getNotification(w http.ResponseWriter, r *htt
 		return
 	}
 
-	resp := toGetNotificationResponse(n)
+	resp := GetNotificationResponse(toNotificationResponse(n))
 	rh.JSONResponse(resp, http.StatusOK)
 }

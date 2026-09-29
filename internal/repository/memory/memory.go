@@ -67,15 +67,27 @@ func (r *MemoryRepository) GetAll(_ context.Context) ([]domain.Notification, err
 	return result, nil
 }
 
-func (r *MemoryRepository) GetList(ctx context.Context, page int, size int) ([]domain.Notification, error) {
-	if page <= 0 {
-		page = 1
+func (r *MemoryRepository) GetList(
+	ctx context.Context,
+	page *int,
+	size *int,
+) ([]domain.Notification, error) {
+	var pg int
+	var sz int
+	if page != nil && size != nil {
+		pg = *page
+		sz = *size
+	} else {
+		return nil, core_errors.ErrInvalidArgument
 	}
-	if size <= 0 {
-		size = 10
+	if pg <= 0 {
+		pg = 1
 	}
-	if size > 100 {
-		size = 100
+	if sz <= 0 {
+		sz = 10
+	}
+	if sz > 100 {
+		sz = 100
 	}
 
 	all, err := r.GetAll(ctx)
@@ -83,7 +95,7 @@ func (r *MemoryRepository) GetList(ctx context.Context, page int, size int) ([]d
 		return nil, err
 	}
 
-	firstIndex := (page - 1) * size
+	firstIndex := (pg - 1) * sz
 	if firstIndex > len(all)-1 {
 		return []domain.Notification{}, nil
 	}
@@ -91,10 +103,10 @@ func (r *MemoryRepository) GetList(ctx context.Context, page int, size int) ([]d
 	slices.SortFunc(all, func(a, b domain.Notification) int {
 		return cmp.Compare(a.ID, b.ID)
 	})
-	lastIndex := min(firstIndex+(size-1), len(all)-1)
+	lastIndex := min(firstIndex+(sz-1), len(all)-1)
 	all = all[firstIndex : lastIndex+1]
 
-	result := make([]domain.Notification, len(all), size)
+	result := make([]domain.Notification, len(all), sz)
 	copy(result, all)
 
 	return result, nil

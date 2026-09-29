@@ -5,24 +5,22 @@ import (
 	"fmt"
 
 	"notifier/internal/core/domain"
+	core_errors "notifier/internal/core/errors"
 )
 
 // List возвращает страницу уведомлений, нормализуя page/size к разумным значениям по умолчанию.
 func (s *NotificationService) List(
 	ctx context.Context,
-	page int,
-	size int,
+	page *int,
+	size *int,
 ) ([]domain.Notification, error) {
 	const op = "NotificationService.List"
 
-	if page <= 0 {
-		page = 1
+	if page != nil && *page < 0 {
+		return nil, fmt.Errorf("%s: %w", op, core_errors.ErrInvalidArgument)
 	}
-	if size <= 0 {
-		size = 10
-	}
-	if size > 100 {
-		size = 100
+	if size != nil && *size < 0 {
+		return nil, fmt.Errorf("%s: %w", op, core_errors.ErrInvalidArgument)
 	}
 
 	notifications, err := s.repo.GetList(ctx, page, size)
