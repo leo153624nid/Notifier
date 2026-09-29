@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	core_logger "notifier/internal/core/logger"
+	core_http_request "notifier/internal/core/transport/http/request"
 	core_http_response "notifier/internal/core/transport/http/response"
-	core_http_utils "notifier/internal/core/transport/http/utils"
 )
 
 func (h *NotificationsHTTPHandler) deleteNotification(w http.ResponseWriter, r *http.Request) {
@@ -13,7 +13,7 @@ func (h *NotificationsHTTPHandler) deleteNotification(w http.ResponseWriter, r *
 	logger := core_logger.FromContext(ctx)
 	rh := core_http_response.NewHTTPResponseHandler(logger, w)
 
-	id, pathErr := core_http_utils.GetIntPathValue(r, "id")
+	id, pathErr := core_http_request.GetIntPathValue(r, "id")
 	if pathErr != nil {
 		rh.ErrorResponse(
 			"failed to get `id` path value",

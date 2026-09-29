@@ -5,8 +5,13 @@ import (
 	"net/http"
 
 	core_logger "notifier/internal/core/logger"
+	core_http_request "notifier/internal/core/transport/http/request"
 	core_http_response "notifier/internal/core/transport/http/response"
-	core_http_utils "notifier/internal/core/transport/http/utils"
+)
+
+const (
+	pageKey = "page"
+	sizeKey = "size"
 )
 
 func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *http.Request) {
@@ -31,12 +36,12 @@ func (h *NotificationsHTTPHandler) listNotifications(w http.ResponseWriter, r *h
 }
 
 func getPaginationParams(r *http.Request) (page *int, size *int, err error) {
-	page, pageErr := core_http_utils.GetIntQueryParam(r, "page")
+	page, pageErr := core_http_request.GetIntQueryParam(r, pageKey)
 	if pageErr != nil {
 		return nil, nil, fmt.Errorf("`page` param failed: %w", pageErr)
 	}
 
-	size, sizeErr := core_http_utils.GetIntQueryParam(r, "size")
+	size, sizeErr := core_http_request.GetIntQueryParam(r, sizeKey)
 	if sizeErr != nil {
 		return nil, nil, fmt.Errorf("`size` param failed: %w", sizeErr)
 	}

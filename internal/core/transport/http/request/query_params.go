@@ -1,10 +1,11 @@
-package core_http_utils
+package core_http_request
 
 import (
 	"fmt"
 	"net/http"
-	core_errors "notifier/internal/core/errors"
 	"strconv"
+
+	core_errors "notifier/internal/core/errors"
 )
 
 func GetIntQueryParam(r *http.Request, key string) (*int, error) {
