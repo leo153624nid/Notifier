@@ -57,45 +57,45 @@ migrate-create: ## создать пару файлов миграции: make m
 	echo "created $$dir/$${ts}_$(name).{up,down}.sql"
 
 proto: ## генерация прото файлов
-	protoc \
+	@protoc \
   		--go_out=contracts/gen --go_opt=paths=source_relative \
   		--go-grpc_out=contracts/gen --go-grpc_opt=paths=source_relative \
   		--proto_path=contracts/proto \
   		contracts/proto/notifications/v1/notification.proto
 
 test: ## запустить тесты
-	go test ./...
+	@go test ./...
 
 test-race: ## запустить тесты с race
-	go test -race ./...
+	@go test -race ./...
 
 lint: ## прогнать golangci-lint
-	golangci-lint run ./...
+	@golangci-lint run ./...
 
 clean: ## удалить bin/
-	rm -rf bin/
+	@rm -rf bin/
 
 docker-build: ## собрать docker-образ сервиса
-	docker compose --env-file $(ENV_FILE) build
+	@docker compose --env-file $(ENV_FILE) build
 
 docker-up: ## пересобрать и поднять сервис вместе с базой
 	# создаём заранее от текущего пользователя — иначе Docker создаст volume-
 	# директорию сам от root, и notifier (UID 65532 в контейнере) не сможет
 	# в неё писать (см. Dockerfile: `USER 65532:65532`)
 	@mkdir -p $(PROJECT_ROOT)/out/logs
-	docker compose --env-file $(ENV_FILE) up -d --build
+	@docker compose --env-file $(ENV_FILE) up -d --build
 
 docker-start: ## запустить ранее остановленные контейнеры без пересборки
-	docker compose --env-file $(ENV_FILE) start
+	@docker compose --env-file $(ENV_FILE) start
 
 docker-stop: ## остановить контейнеры без удаления
-	docker compose --env-file $(ENV_FILE) stop
+	@docker compose --env-file $(ENV_FILE) stop
 
 docker-down: ## остановить и удалить контейнеры
-	docker compose --env-file $(ENV_FILE) down
+	@docker compose --env-file $(ENV_FILE) down
 
 docker-logs: ## смотреть логи сервиса
-	docker compose --env-file $(ENV_FILE) logs -f notifier
+	@docker compose --env-file $(ENV_FILE) logs -f notifier
 
 release: ## Собрать релизные бинарники в dist/
 	@mkdir -p dist

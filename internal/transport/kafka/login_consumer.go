@@ -105,6 +105,12 @@ func (c *LoginConsumer) Run(
 			continue
 		}
 
+		start := time.Now()
+		logger.Info(
+			">>>> incoming Kafka message",
+			zap.Time("time", start.UTC()),
+		)
+
 		if err := c.handleMessage(ctx, msg.Value); err != nil {
 			logger.Error(
 				"handle message failed",
@@ -118,6 +124,12 @@ func (c *LoginConsumer) Run(
 					zap.String("op", op),
 					zap.Error(dlqErr),
 				)
+
+				logger.Info(
+					">>>> done Kafka message",
+					zap.String("status", "DLQ sending failed"),
+					zap.Duration("latency", time.Since(start)),
+				)
 				continue
 			}
 		}
@@ -127,7 +139,20 @@ func (c *LoginConsumer) Run(
 				zap.String("op", op),
 				zap.Error(err),
 			)
+
+			logger.Info(
+				">>>> done Kafka message",
+				zap.String("status", "un_committed"),
+				zap.Duration("latency", time.Since(start)),
+			)
+			continue
 		}
+
+		logger.Info(
+			">>>> done Kafka message",
+			zap.String("status", "committed"),
+			zap.Duration("latency", time.Since(start)),
+		)
 	}
 }
 
