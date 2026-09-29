@@ -36,6 +36,9 @@ func (h *NotificationsHTTPHandler) Routes() []core_http_server.Route {
 			Method:  http.MethodGet,
 			Path:    "/health",
 			Handler: h.healthHandler,
+			// Middleware: []core_http_middleware.Middleware{ // Middlewares for endpoint
+
+			// },
 		},
 		{
 			Method:  http.MethodGet,

@@ -46,7 +46,7 @@ func (srv *HTTPServer) RegisterApiRoutes(routers ...*ApiVersionRouter) {
 
 		srv.mux.Handle(
 			prefix+"/",
-			http.StripPrefix(prefix, router),
+			http.StripPrefix(prefix, router.WithMiddleware()),
 		)
 	}
 }

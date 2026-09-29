@@ -19,24 +19,35 @@ type ApiVersionRouter struct {
 	*http.ServeMux
 	limiter    *core_http_middleware.IpRateLimiter
 	apiVersion ApiVersion
+	middleware []core_http_middleware.Middleware
 }
 
 func NewApiVersionRouter(
 	apiVersion ApiVersion,
 	limiter *core_http_middleware.IpRateLimiter,
+	middleware ...core_http_middleware.Middleware,
 ) *ApiVersionRouter {
 	return &ApiVersionRouter{
 		ServeMux:   http.NewServeMux(),
 		apiVersion: apiVersion,
 		limiter:    limiter,
+		middleware: middleware,
 	}
 }
 
 func (r *ApiVersionRouter) RegisterRoutes(routes ...Route) {
 	for _, route := range routes {
 		pattern := fmt.Sprintf("%s %s", route.Method, route.Path)
-		r.Handle(pattern, route.Handler)
+
+		r.Handle(pattern, route.WithMiddleware())
 	}
+}
+
+func (r *ApiVersionRouter) WithMiddleware() http.Handler {
+	return core_http_middleware.Chain(
+		r,
+		r.middleware...,
+	)
 }
 
 // Stop останавливает фоновую очистку rate limiter'а — вызывать при graceful shutdown.

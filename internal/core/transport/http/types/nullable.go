@@ -29,3 +29,10 @@ func (n *Nullable[T]) UnmarshalJSON(
 	n.Value = &value
 	return nil
 }
+
+func (n *Nullable[T]) ToDomain() domain.Nullable[T] {
+	return domain.Nullable[T]{
+		Value: n.Value,
+		Set:   n.Set,
+	}
+}

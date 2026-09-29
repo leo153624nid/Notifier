@@ -9,7 +9,7 @@ import (
 
 type Config struct {
 	Port            string        `envconfig:"PORT" required:"true"`
-	ShutdownTimeout time.Duration `envconfig:"SHUTDOWN_TIMEOUT" required:"true"`
+	ShutdownTimeout time.Duration `envconfig:"SHUTDOWN_TIMEOUT" default:"30s"`
 }
 
 func NewConfig() (Config, error) {
@@ -20,8 +20,6 @@ func NewConfig() (Config, error) {
 	if err := envconfig.Process("HTTP", &cfg); err != nil {
 		return Config{}, fmt.Errorf("%s: process: %w", op, err)
 	}
-
-	cfg.ShutdownTimeout = 30
 
 	return cfg, nil
 }

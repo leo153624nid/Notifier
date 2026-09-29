@@ -73,6 +73,7 @@ func main() {
 	if poolErr != nil {
 		logger.Fatal("new connection pool", zap.Error(poolErr))
 	}
+	defer pool.Close()
 	logger.Warn("database connected")
 
 	// Схема БД управляется отдельным шагом деплоя (cmd/migrate, см.
@@ -147,6 +148,7 @@ func main() {
 	notificationsApiVersionRouter := core_http_server.NewApiVersionRouter(
 		core_http_server.ApiVersion1,
 		ipLimiter,
+		// Router middlewares
 	)
 	notificationsApiVersionRouter.RegisterRoutes(notificationsRoutes...)
 
@@ -155,8 +157,8 @@ func main() {
 		logger,
 		core_http_middleware.RequestID(),
 		core_http_middleware.Logger(logger),
-		core_http_middleware.Panic(),
 		core_http_middleware.Trace(),
+		core_http_middleware.Panic(),
 		core_http_middleware.RateLimiter(ipLimiter),
 		core_http_middleware.Auth(cfg.JWTSecret),
 	)
